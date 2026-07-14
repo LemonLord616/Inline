@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inline — {{ queue.name }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="page">
+        <a href="/" class="back-link">&larr; На главную</a>
+        <div class="card">
+            <div class="queue-header">
+                <h1 id="qName">{{ queue.name }}</h1>
+                <span class="status-badge" id="qStatus">{{ queue.status.value }}</span>
+            </div>
+
+            <div id="infoBlock" class="info-block" style="display:none;"></div>
+
+            <div class="my-position-box" id="myPositionBox" style="display:none;">
+                <div class="position-number" id="myPosition">-</div>
+                <div class="position-label" id="myPositionLabel">Ваша позиция</div>
+                <div class="position-slot" id="mySlot"></div>
+            </div>
+
+            <div class="my-status-box" id="myStatusBox" style="display:none;">
+                <span class="status-tag" id="myStatus">-</span>
+            </div>
+
+            <div class="queue-actions" id="queueActions" style="display:none;">
+                <button class="btn btn-outline-warning btn-sm" onclick="markDelayed()">&#9200; Задерживаюсь</button>
+            </div>
+
+            <div id="mySwapNotification" class="swap-notification" style="display:none;"></div>
+
+            <div id="calledBanner" class="called-banner" style="display:none;">
+                <span class="called-banner-icon">&#9202;</span>
+                <span class="called-banner-text">Ваша очередь! Подойдите к месту обслуживания.</span>
+            </div>
+
+            <div id="swapWrap" style="display:none;">
+            <details class="swap-details" open>
+                <summary class="swap-summary">Запросы и обмен</summary>
+                <div class="swap-details-body">
+                    <p class="hint" style="margin-bottom:12px;">Используйте смену слота или позиции только при уважительной причине. Частые запросы создают неудобства для других участников и организатора.</p>
+                    <div class="swap-type-tabs">
+                        <button class="swap-tab active" onclick="setSwapType('slot_change',this)">Сменить слот</button>
+                        <button class="swap-tab" id="posTab" onclick="setSwapType('position_change',this)">Позиция в слоте</button>
+                    </div>
+                    <div id="swapSlotPanel">
+                        <label class="form-label">Выберите слот</label>
+                        <select id="swapTargetSlot" class="input"></select>
+                        <button class="btn btn-primary btn-sm" onclick="requestSwap()" style="margin-top:10px;">Отправить запрос</button>
+                    </div>
+                    <div id="swapPositionPanel" style="display:none;">
+                        <p class="hint" style="margin-bottom:10px;">Куда хотите переместиться?</p>
+                        <div class="pos-buttons">
+                            <button class="btn btn-secondary btn-sm" onclick="requestPositionSwap(0)">В начало слота</button>
+                            <button class="btn btn-secondary btn-sm" onclick="requestPositionSwap(99999)">В конец слота</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+            </div>
+
+            <div class="slots-section">
+                <h3>Расписание</h3>
+                <div class="slots-list" id="slotsList"><div class="loading">Загрузка...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const queueId = '{{ queue.id }}';
+    const userToken = localStorage.getItem('user_token_' + queueId);
+    let currentSwapType = 'slot_change';
+    let cachedData = null;
+
+    function setSwapType(type, btn) {
+        currentSwapType = type;
+        document.querySelectorAll('.swap-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('swapSlotPanel').style.display = type === 'slot_change' ? 'block' : 'none';
+        document.getElementById('swapPositionPanel').style.display = type === 'position_change' ? 'block' : 'none';
+    }
+
+    async function loadQueue() {
+        const res = await fetch('/api/queue/' + queueId);
+        const data = await res.json();
+        cachedData = data;
+        document.getElementById('qName').textContent = data.name;
+        document.getElementById('qStatus').textContent = data.status;
+        document.getElementById('qStatus').className = 'status-badge status-' + data.status;
+
+        if (data.info) {
+            document.getElementById('infoBlock').style.display = 'block';
+            document.getElementById('infoBlock').textContent = data.info;
+        } else {
+            document.getElementById('infoBlock').style.display = 'none';
+        }
+
+        const myToken = userToken;
+        const me = myToken ? data.participants.find(p => p.user_token === myToken) : null;
+        const mySlotGroup = me ? me.slot_group : -1;
+
+        const slotPeople = {};
+        for (const p of data.participants) {
+            if (!['waiting','called','delayed'].includes(p.status)) continue;
+            const g = p.slot_group;
+            if (!slotPeople[g]) slotPeople[g] = [];
+            slotPeople[g].push(p);
+        }
+        for (const g of Object.keys(slotPeople)) {
+            slotPeople[g].sort((a, b) => a.position - b.position);
+        }
+
+        let html = '';
+        for (const p of data.participants) {
+            if (!['waiting','called','delayed','served','skipped'].includes(p.status)) continue;
+            const isDone = ['served','skipped'].includes(p.status);
+            const isCalled = p.status === 'called';
+            const isDelayed = p.status === 'delayed';
+            const isMe = myToken && p.user_token === myToken;
+
+            let slotInSlot = '';
+            if (!isDone && p.slot_group !== null && slotPeople[p.slot_group]) {
+                const idx = slotPeople[p.slot_group].findIndex(x => x.id === p.id);
+                if (slotPeople[p.slot_group].length > 1) {
+                    slotInSlot = '#' + (idx + 1) + ' в слоте';
+                }
+            }
+
+            let cls = 'slot';
+            if (isMe) cls += ' slot-me';
+            if (isDone) cls += ' slot-done';
+            if (isCalled && isMe) cls += ' slot-called';
+
+            html += '<div class="'+cls+'">';
+            html += '<div class="slot-left">';
+            html += '<span class="slot-pos">'+p.position+'</span>';
+            html += '<span class="slot-name">'+esc(p.name)+(isMe?' <span class="you-badge">вы</span>':'')+'</span>';
+            if (slotInSlot) html += '<span class="slot-in-slot">'+slotInSlot+'</span>';
+            if (isCalled) html += '<span class="status-pill called-pill">Вызван</span>';
+            else if (isDelayed) html += '<span class="status-pill delayed-pill">Задерживается</span>';
+            else if (p.status==='served') html += '<span class="status-pill served-pill">Обслужён</span>';
+            else if (p.status==='skipped') html += '<span class="status-pill skipped-pill">Пропущен</span>';
+            html += '</div>';
+            html += '<div class="slot-right">';
+            if (p.slot_label) html += '<span class="slot-time-badge">'+esc(p.slot_label)+'</span>';
+            html += '</div></div>';
+        }
+        if (!html) html = '<div class="empty">Пока никого нет</div>';
+        document.getElementById('slotsList').innerHTML = html;
+
+        updateMyInfo(data);
+        updateSwapSection(data);
+        checkSwapNotifications(data);
+    }
+
+    function updateMyInfo(data) {
+        if (!userToken) return;
+        const me = data.participants.find(p => p.user_token === userToken);
+        if (!me) return;
+        document.getElementById('myPositionBox').style.display = 'block';
+        document.getElementById('myStatusBox').style.display = 'block';
+        document.getElementById('myPosition').textContent = '#' + me.position;
+
+        const slotBox = document.getElementById('mySlot');
+        const posLabel = document.getElementById('myPositionLabel');
+        if (me.status === 'called') {
+            slotBox.textContent = 'Сейчас ваша очередь!'; slotBox.className = 'position-slot slot-now-text';
+            posLabel.textContent = 'Вызван';
+        } else if (me.status === 'served') {
+            slotBox.textContent = 'Вы обслужены'; slotBox.className = 'position-slot slot-served-text';
+            posLabel.textContent = 'Статус';
+        } else if (me.slot_label) {
+            slotBox.textContent = me.slot_label; slotBox.className = 'position-slot';
+            const slotPeople = data.participants.filter(p => ['waiting','called','delayed'].includes(p.status) && p.slot_group === me.slot_group).sort((a,b)=>a.position-b.position);
+            if (slotPeople.length > 1) {
+                const myIdx = slotPeople.findIndex(p => p.user_token === userToken);
+                posLabel.textContent = 'Позиция в слоте: ' + (myIdx + 1) + ' из ' + slotPeople.length;
+            } else {
+                posLabel.textContent = 'Ваш слот';
+            }
+        }
+
+        const statusTag = document.getElementById('myStatus');
+        const map = {waiting:{t:'Ожидает',c:''},called:{t:'Вызван',c:'tag-blue'},delayed:{t:'Задерживается',c:'tag-yellow'},served:{t:'Обслужён',c:'tag-green'},skipped:{t:'Пропущен',c:'tag-gray'}};
+        const s = map[me.status]||map.waiting;
+        statusTag.textContent = s.t; statusTag.className = 'status-tag '+s.c;
+
+        const canDelay = data.allow_delay && (me.status==='waiting'||me.status==='called') && me.status!=='delayed';
+        document.getElementById('queueActions').style.display = canDelay ? 'flex' : 'none';
+
+        const banner = document.getElementById('calledBanner');
+        banner.style.display = me.status === 'called' ? 'flex' : 'none';
+    }
+
+    function updateSwapSection(data) {
+        if (!userToken || !data.allow_swap) { document.getElementById('swapWrap').style.display='none'; return; }
+        const me = data.participants.find(p => p.user_token === userToken);
+        if (!me || me.status !== 'waiting') { document.getElementById('swapWrap').style.display='none'; return; }
+        document.getElementById('swapWrap').style.display = 'block';
+
+        const maxPer = data.max_per_slot || 1;
+        document.getElementById('posTab').style.display = maxPer > 1 ? '' : 'none';
+
+        if (currentSwapType === 'position_change' && maxPer <= 1) {
+            setSwapType('slot_change', document.querySelector('.swap-tab'));
+        }
+
+        const sel = document.getElementById('swapTargetSlot');
+        sel.innerHTML = '';
+        for (const s of (data.slots || [])) {
+            const isCurrent = me.slot_group === s.index;
+            let label = esc(s.label);
+            if (maxPer > 1) label += ' ('+s.count+'/'+s.max+')';
+            if (isCurrent) label += ' — текущий';
+            sel.innerHTML += '<option value="'+s.index+'"'+(isCurrent?' disabled':'')+'>'+label+'</option>';
+        }
+    }
+
+    function checkSwapNotifications(data) {
+        if (!userToken) return;
+        const el = document.getElementById('mySwapNotification');
+        const me = data.participants.find(p => p.user_token === userToken);
+        if (!me) { el.style.display='none'; return; }
+        const mySwap = (data.pending_swaps||[]).find(s => s.from_id === me.id);
+        if (mySwap) {
+            let desc = '';
+            if (mySwap.swap_type === 'slot_change') {
+                desc = 'Запрос: смена слота → ' + (mySwap.target_slot_label || '?');
+            } else {
+                desc = 'Запрос: смена позиции в слоте';
+            }
+            el.innerHTML = '<span class="swap-notif-text">'+esc(desc)+'</span><button class="btn btn-danger btn-xs" onclick="cancelSwap(\''+mySwap.id+'\')">Отменить</button>';
+            el.style.display = 'flex';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
+    async function markDelayed() {
+        const me = cachedData.participants.find(p => p.user_token === userToken);
+        if (!me) return;
+        const fd = new FormData(); fd.append('user_token', userToken);
+        await fetch('/api/queue/'+queueId+'/delay/'+me.id, {method:'POST', body:fd});
+        loadQueue();
+    }
+
+    async function requestSwap() {
+        const target = document.getElementById('swapTargetSlot').value;
+        if (target === '') return;
+        const me = cachedData.participants.find(p => p.user_token === userToken);
+        if (!me) return;
+        const fd = new FormData();
+        fd.append('from_id', me.id);
+        fd.append('from_token', userToken);
+        fd.append('swap_type', 'slot_change');
+        fd.append('target_slot_group', parseInt(target));
+        const r = await fetch('/api/queue/'+queueId+'/swap/request', {method:'POST', body:fd});
+        if (r.ok) loadQueue();
+        else { const e = await r.json(); alert(e.detail||'Ошибка'); }
+    }
+
+    async function requestPositionSwap(targetPos) {
+        const me = cachedData.participants.find(p => p.user_token === userToken);
+        if (!me) return;
+        const fd = new FormData();
+        fd.append('from_id', me.id);
+        fd.append('from_token', userToken);
+        fd.append('swap_type', 'position_change');
+        fd.append('target_position', targetPos);
+        const r = await fetch('/api/queue/'+queueId+'/swap/request', {method:'POST', body:fd});
+        if (r.ok) loadQueue();
+        else { const e = await r.json(); alert(e.detail||'Ошибка'); }
+    }
+
+    async function cancelSwap(swapId) {
+        const fd = new FormData(); fd.append('user_token', userToken);
+        await fetch('/api/queue/'+queueId+'/swap/cancel/'+swapId, {method:'POST', body:fd});
+        loadQueue();
+    }
+
+    function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    loadQueue();
+    setInterval(loadQueue, 3000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inline — Создать очередь</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="page">
+        <a href="/" class="back-link">&larr; Назад</a>
+        <div class="card">
+            <h1>Создать очередь</h1>
+            <form id="createForm" class="form">
+                <div class="form-group">
+                    <label for="name">Название *</label>
+                    <input type="text" id="name" name="name" class="input" required placeholder="Экзамен, заселение...">
+                </div>
+                <div class="form-group">
+                    <label for="description">Описание</label>
+                    <textarea id="description" name="description" class="input textarea" placeholder="Опционально"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group flex-1">
+                        <label for="max_size">Максимум людей</label>
+                        <input type="number" id="max_size" name="max_size" class="input" value="50" min="2" max="500">
+                    </div>
+                    <div class="form-group flex-1">
+                        <label for="max_per_slot">Человек в слоте</label>
+                        <input type="number" id="max_per_slot" name="max_per_slot" class="input" value="1" min="1" max="100">
+                        <span class="hint">Сколько людей на одно время</span>
+                    </div>
+                </div>
+                <div class="slot-settings">
+                    <h3>Слоты</h3>
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label for="start_time">Начало</label>
+                            <input type="time" id="start_time" name="start_time" class="input" value="09:00">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label for="slot_duration_minutes">Длит. слота (мин)</label>
+                            <input type="number" id="slot_duration_minutes" name="slot_duration_minutes" class="input" value="30" min="5" max="480">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="info">Информация для участников</label>
+                    <textarea id="info" name="info" class="input textarea" placeholder="Аудитория 301, взять паспорт, и т.д."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="safe_window_minutes">Окно для опоздавших (мин)</label>
+                    <input type="number" id="safe_window_minutes" name="safe_window_minutes" class="input" value="5" min="0" max="60">
+                </div>
+                <div class="form-group">
+                    <label>Опоздавшие</label>
+                    <div class="radio-group">
+                        <label class="radio-label"><input type="radio" name="latecomer_policy" value="to_end" checked><span>В конец очереди</span></label>
+                        <label class="radio-label"><input type="radio" name="latecomer_policy" value="discard"><span>Удалить</span></label>
+                    </div>
+                </div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" checked><span>Разрешить "задерживаюсь"</span></label></div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap"><span>Разрешить смену слота/места</span></label></div>
+                <button type="submit" class="btn btn-primary btn-block">Создать</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        document.getElementById('createForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const fd = new FormData(this);
+            const res = await fetch('/api/queue/create', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem('admin_' + data.queue_id, JSON.stringify({id: data.queue_id, token: data.organizer_token, name: fd.get('name')}));
+                window.location.href = '/admin/' + data.queue_id + '?token=' + data.organizer_token;
+            } else alert('Ошибка: ' + (data.detail || ''));
+        });
+    </script>
+</body>
+</html>

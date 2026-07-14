@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inline — {{ queue.name }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="page">
+        <a href="/" class="back-link">&larr; Назад</a>
+        <div class="card">
+            <div class="queue-header">
+                <h1>{{ queue.name }}</h1>
+                <span class="status-badge status-{{ queue.status.value }}" id="qStatus">{{ queue.status.value }}</span>
+            </div>
+
+            <div class="share-panel">
+                <div class="share-row">
+                    <div class="share-qr">{{ qr_svg | safe }}</div>
+                    <div class="share-info">
+                        <div class="code-display">
+                            <span class="code-label">Код очереди</span>
+                            <span class="code-value" id="codeValue" onclick="copyText('{{ queue.code }}')">{{ queue.code }}</span>
+                            <span class="copy-hint" id="codeHint">нажмите чтобы скопировать</span>
+                        </div>
+                        <div class="share-link-row">
+                            <input type="text" class="input input-sm" value="{{ share_url }}" readonly id="shareLink">
+                            <button class="btn btn-secondary btn-sm" onclick="copyText(document.getElementById('shareLink').value)">Скопировать</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-controls">
+                <div class="control-buttons">
+                    {% if queue.status.value == 'active' %}
+                    <button class="btn btn-warning btn-sm" onclick="pauseQueue()">Пауза</button>
+                    {% elif queue.status.value == 'paused' %}
+                    <button class="btn btn-primary btn-sm" onclick="resumeQueue()">Возобновить</button>
+                    {% else %}
+                    <button class="btn btn-primary btn-sm" onclick="reopenQueue()">Открыть заново</button>
+                    {% endif %}
+                    {% if queue.status.value != 'closed' %}
+                    <button class="btn btn-danger btn-sm" onclick="closeQueue()">Закрыть</button>
+                    {% endif %}
+                    <button class="btn btn-primary" onclick="callNext()">Вызвать следующего</button>
+                </div>
+            </div>
+
+            <div class="admin-settings">
+                <details>
+                    <summary class="settings-toggle">Настройки</summary>
+                    <form id="settingsForm" class="form compact">
+                        <div class="form-row">
+                            <div class="form-group flex-1"><label>Начало</label><input type="time" name="start_time" class="input" value="{{ queue.start_time or '09:00' }}"></div>
+                            <div class="form-group flex-1"><label>Длит. слота (мин)</label><input type="number" name="slot_duration_minutes" class="input" value="{{ queue.slot_duration_minutes or 30 }}" min="5" max="480"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group flex-1"><label>Человек в слоте</label><input type="number" name="max_per_slot" class="input" value="{{ queue.max_per_slot or 1 }}" min="1" max="100"></div>
+                            <div class="form-group flex-1"><label>Макс. людей</label><input type="number" name="max_size" class="input" value="{{ queue.max_size }}" min="2" max="500"></div>
+                        </div>
+                        <div class="form-group"><label>Информация для участников</label><textarea name="info" class="input textarea" placeholder="Аудитория, что взять и т.д.">{{ queue.info or '' }}</textarea></div>
+                        <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap" {{ 'checked' if queue.allow_swap else '' }}><span>Смена слота/места</span></label></div>
+                        <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" {{ 'checked' if queue.allow_delay else '' }}><span>"Задерживаюсь"</span></label></div>
+                        <div class="form-row">
+                            <div class="form-group flex-1"><label>Окно (мин)</label><input type="number" name="safe_window_minutes" class="input" value="{{ queue.safe_window_minutes }}" min="0" max="60"></div>
+                            <div class="form-group flex-1"><label>Опоздавшие</label>
+                                <div class="radio-group">
+                                    <label class="radio-label"><input type="radio" name="latecomer_policy" value="to_end" {{ 'checked' if queue.latecomer_policy.value=='to_end' else '' }}><span>В конец</span></label>
+                                    <label class="radio-label"><input type="radio" name="latecomer_policy" value="discard" {{ 'checked' if queue.latecomer_policy.value=='discard' else '' }}><span>Удалить</span></label>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-secondary btn-sm">Сохранить</button>
+                    </form>
+                </details>
+            </div>
+
+            <details class="swap-details" open>
+                <summary class="swap-summary">Запросы <span class="swap-badge" id="swapBadge">0</span></summary>
+                <div class="swap-details-body" id="swapRequestsBody">
+                    <div class="empty-inline">Нет запросов</div>
+                </div>
+            </details>
+
+            <div class="slots-section">
+                <div class="slots-header">
+                    <h3>Слоты</h3>
+                    <span class="slot-count" id="slotCount"></span>
+                </div>
+                <div class="slot-overview" id="slotOverview"></div>
+
+                <div class="bulk-toolbar" id="bulkToolbar" style="display:none;">
+                    <span class="bulk-selected" id="bulkSelected">0 выбрано</span>
+                    <div class="bulk-actions">
+                        <select id="bulkTargetSlot" class="input input-sm bulk-select"></select>
+                        <button class="btn btn-primary btn-sm" onclick="bulkMove()">Переместить</button>
+                        <button class="btn btn-secondary btn-xs" onclick="clearSelection()">Снять</button>
+                    </div>
+                </div>
+
+                <div class="slots-list" id="participantsList"><div class="loading">Загрузка...</div></div>
+            </div>
+
+            <div class="undo-bar" id="undoBar" style="display:none;">
+                <span id="undoText"></span>
+                <button class="btn btn-secondary btn-sm" onclick="undoLast()">Отменить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+    const queueId = '{{ queue.id }}';
+    const token = '{{ token }}';
+    const apiUrl = '/api/queue/' + queueId + '/admin/' + token;
+    let lastAction = null;
+    let selectedIds = new Set();
+    let cachedData = null;
+    let activeSlotFilter = null;
+    let prevSnapshot = null;
+
+    localStorage.setItem('admin_' + queueId, JSON.stringify({id: queueId, token, name: '{{ queue.name }}'}));
+
+    async function loadQueue() {
+        const res = await fetch('/api/queue/' + queueId);
+        const data = await res.json();
+
+        if (prevSnapshot) detectChanges(prevSnapshot, data);
+        snapshotCurrent(data);
+
+        cachedData = data;
+        document.getElementById('qStatus').textContent = data.status;
+        document.getElementById('qStatus').className = 'status-badge status-' + data.status;
+
+        const waiting = data.participants.filter(p => ['waiting','called','delayed'].includes(p.status));
+        document.getElementById('slotCount').textContent = waiting.length + ' в очереди';
+
+        renderSlotOverview(data);
+        renderSwapRequests(data);
+        renderParticipants(data);
+    }
+
+    function snapshotCurrent(data) {
+        prevSnapshot = {
+            ids: new Set(data.participants.map(p => p.id)),
+            statuses: Object.fromEntries(data.participants.map(p => [p.id, p.status])),
+            swapCount: (data.pending_swaps || []).length,
+        };
+    }
+
+    function detectChanges(prev, data) {
+        const curIds = new Set(data.participants.map(p => p.id));
+        for (const p of data.participants) {
+            if (!prev.ids.has(p.id) && ['waiting','called','delayed'].includes(p.status)) {
+                showToast('Новый участник: ' + p.name, 'info');
+            }
+            const oldStatus = prev.statuses[p.id];
+            if (oldStatus && oldStatus !== p.status && p.status === 'delayed') {
+                showToast(p.name + ' задерживается', 'warning');
+            }
+        }
+        const curSwapCount = (data.pending_swaps || []).length;
+        if (curSwapCount > prev.swapCount) {
+            const newSwaps = (data.pending_swaps || []).filter(s => {
+                const prevIds = new Set();
+                return true;
+            });
+            showToast('Новый запрос на смену слота', 'primary');
+        }
+    }
+
+    function showToast(text, type) {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-' + (type || 'info');
+        toast.textContent = text;
+        container.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('toast-show'));
+        setTimeout(() => {
+            toast.classList.remove('toast-show');
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    function renderSlotOverview(data) {
+        const el = document.getElementById('slotOverview');
+        const slots = data.slots || [];
+        if (slots.length === 0) { el.innerHTML = ''; return; }
+        const maxPer = data.max_per_slot || 1;
+        const simple = maxPer === 1;
+
+        const totalActive = data.participants.filter(p=>['waiting','called','delayed'].includes(p.status)).length;
+        let html = '<button class="slot-card '+(activeSlotFilter===null?'slot-card-active':'')+'" onclick="filterSlot(null)">';
+        html += '<span class="slot-card-time">Все</span>';
+        html += '<span class="slot-card-count">'+totalActive+'</span>';
+        html += '</button>';
+
+        for (const s of slots) {
+            const full = s.count >= s.max;
+            const cls = activeSlotFilter === s.index ? 'slot-card-active' : (full ? 'slot-card-full' : '');
+            html += '<button class="slot-card '+cls+'" onclick="filterSlot('+s.index+')">';
+            html += '<span class="slot-card-time">'+esc(s.label)+'</span>';
+            if (simple) {
+                html += '<span class="slot-card-dot '+(s.count>0?'dot-filled':'')+'"></span>';
+            } else {
+                const pct = s.max > 0 ? Math.round((s.count / s.max) * 100) : 0;
+                html += '<span class="slot-card-count">'+s.count+' / '+s.max+'</span>';
+                html += '<div class="slot-card-bar"><div class="slot-card-fill" style="width:'+pct+'%"></div></div>';
+            }
+            html += '</button>';
+        }
+        html += '<button class="slot-card slot-card-add" onclick="addSlot()">+</button>';
+        el.innerHTML = html;
+    }
+
+    function renderSwapRequests(data) {
+        const body = document.getElementById('swapRequestsBody');
+        const badge = document.getElementById('swapBadge');
+        const swaps = data.pending_swaps || [];
+        badge.textContent = swaps.length;
+        badge.className = 'swap-badge' + (swaps.length > 0 ? ' swap-badge-active' : '');
+
+        if (swaps.length === 0) {
+            body.innerHTML = '<div class="empty-inline">Нет запросов</div>';
+            return;
+        }
+        let h = '';
+        for (const s of swaps) {
+            let desc = '';
+            if (s.swap_type === 'slot_change') {
+                desc = esc(s.from_name) + ' → слот ' + (s.target_slot_label || '?');
+            } else {
+                const posHint = s.target_position === 0 ? 'в начало слота' : 'в конец слота';
+                desc = esc(s.from_name) + ' → ' + posHint;
+            }
+            h += '<div class="swap-card"><span class="swap-text">'+desc+'</span>';
+            h += '<button class="btn btn-primary btn-xs" onclick="acceptSwap(\''+s.id+'\')">Одобрить</button>';
+            h += '<button class="btn btn-danger btn-xs" onclick="rejectSwap(\''+s.id+'\')">Отклонить</button></div>';
+        }
+        body.innerHTML = h;
+    }
+
+    function renderParticipants(data) {
+        let html = '';
+        const active = data.participants.filter(p => ['waiting','called','delayed'].includes(p.status));
+        const done = data.participants.filter(p => ['served','skipped'].includes(p.status));
+
+        const filtered = activeSlotFilter !== null
+            ? active.filter(p => p.slot_group === activeSlotFilter)
+            : active;
+
+        if (filtered.length > 0) {
+            html += '<div class="slot-group">';
+            if (activeSlotFilter !== null) {
+                const s = (data.slots || [])[activeSlotFilter];
+                html += '<div class="slot-group-header"><span class="slot-group-time">'+(s ? s.label : 'Слот '+(activeSlotFilter+1))+'</span>';
+                html += '<span class="slot-group-count">'+filtered.length+' чел.</span></div>';
+            }
+            const allIds = filtered.map(p => p.id);
+            const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+
+            if (!activeSlotFilter && filtered.length > 0) {
+                html += '<div class="slot-group-header"><label class="check-label"><input type="checkbox" '+(allSelected?'checked':'')+' onchange="toggleGroup(this,['+allIds.map(id=>"'"+id+"'").join(',')+'])"></label><span class="slot-group-time">Все участники</span><span class="slot-group-count">'+filtered.length+'</span></div>';
+            }
+
+            for (const p of filtered) {
+                html += renderRow(p, false, data);
+            }
+            html += '</div>';
+        } else if (activeSlotFilter !== null) {
+            html += '<div class="empty">Нет участников в этом слоте</div>';
+        }
+
+        if (done.length > 0 && activeSlotFilter === null) {
+            html += '<div class="slot-group done-group"><div class="slot-group-header"><span class="slot-group-time">Обслужены / Пропущены</span><span class="slot-group-count">'+done.length+'</span></div>';
+            for (const p of done) html += renderRow(p, true, data);
+            html += '</div>';
+        }
+
+        if (!html && activeSlotFilter === null) html = '<div class="empty">Очередь пуста</div>';
+        document.getElementById('participantsList').innerHTML = html;
+    }
+
+    function renderRow(p, isDone, data) {
+        const isCalled = p.status === 'called';
+        const isDelayed = p.status === 'delayed';
+        const checked = selectedIds.has(p.id) ? 'checked' : '';
+
+        let cls = 'slot';
+        if (isDone) cls += ' slot-done';
+        if (isCalled) cls += ' slot-called';
+
+        let html = '<div class="'+cls+'" data-id="'+p.id+'">';
+        html += '<div class="slot-left">';
+        if (!isDone) html += '<label class="check-label"><input type="checkbox" '+checked+' onchange="toggleSelect(\''+p.id+'\')"></label>';
+        html += '<span class="slot-pos">'+p.position+'</span>';
+        html += '<span class="slot-name">'+esc(p.name)+'</span>';
+        if (isCalled) html += '<span class="status-pill called-pill">Вызван</span>';
+        else if (isDelayed) html += '<span class="status-pill delayed-pill">Задерживается</span>';
+        else if (p.status==='served') html += '<span class="status-pill served-pill">Обслужён</span>';
+        else if (p.status==='skipped') html += '<span class="status-pill skipped-pill">Пропущен</span>';
+        html += '</div>';
+        html += '<div class="slot-right">';
+        if (!isDone) {
+            html += '<select class="slot-select" onchange="quickMove(\''+p.id+'\',this.value)">';
+            for (const s of (data.slots || [])) {
+                html += '<option value="'+s.index+'" '+(p.slot_group===s.index?'selected':'')+'> '+s.label+'</option>';
+            }
+            html += '</select>';
+            html += '<div class="slot-actions">';
+            html += '<button class="btn btn-primary btn-xs" onclick="serve(\''+p.id+'\')" title="Обслужён">&#10003;</button>';
+            html += '<button class="btn btn-warning btn-xs" onclick="skip(\''+p.id+'\')" title="Пропустить">&#10007;</button>';
+            html += '</div>';
+        } else {
+            html += '<button class="btn btn-secondary btn-xs" onclick="undoAction(\''+p.id+'\')" title="Вернуть">&#8634;</button>';
+        }
+        html += '</div></div>';
+        return html;
+    }
+
+    function filterSlot(idx) {
+        activeSlotFilter = idx;
+        if (cachedData) renderParticipants(cachedData);
+        renderSlotOverview(cachedData);
+    }
+
+    async function addSlot() {
+        if (!cachedData) return;
+        const slots = cachedData.slots || [];
+        const newIdx = slots.length;
+        const maxPer = cachedData.max_per_slot || 1;
+        const sd = cachedData.slot_duration_minutes || 30;
+        const st = cachedData.start_time || '09:00';
+        const [h, m] = st.split(':').map(Number);
+        const startMin = h * 60 + m + sd * newIdx;
+        const eh = String(Math.floor(startMin / 60) % 24).padStart(2, '0');
+        const em = String(startMin % 60).padStart(2, '0');
+        const sh = String(Math.floor((h * 60 + m + sd * newIdx) / 60) % 24).padStart(2, '0');
+        const sm = String((h * 60 + m + sd * newIdx) % 60).padStart(2, '0');
+        alert('Слот '+sh+':'+sm+' – '+eh+':'+em+' будет создан когда кто-то войдёт или будет перемещён в него.');
+    }
+
+    function toggleSelect(id) {
+        if (selectedIds.has(id)) selectedIds.delete(id);
+        else selectedIds.add(id);
+        updateBulkBar();
+        if (cachedData) renderParticipants(cachedData);
+    }
+
+    function toggleGroup(checkbox, ids) {
+        for (const id of ids) {
+            if (checkbox.checked) selectedIds.add(id);
+            else selectedIds.delete(id);
+        }
+        updateBulkBar();
+        if (cachedData) renderParticipants(cachedData);
+    }
+
+    function clearSelection() {
+        selectedIds.clear();
+        updateBulkBar();
+        if (cachedData) renderParticipants(cachedData);
+    }
+
+    function updateBulkBar() {
+        const bar = document.getElementById('bulkToolbar');
+        const count = selectedIds.size;
+        if (count > 0) {
+            bar.style.display = 'flex';
+            document.getElementById('bulkSelected').textContent = count + ' выбрано';
+            const sel = document.getElementById('bulkTargetSlot');
+            sel.innerHTML = '';
+            for (const s of (cachedData?.slots || [])) {
+                sel.innerHTML += '<option value="'+s.index+'">'+esc(s.label)+' ('+s.count+'/'+s.max+')</option>';
+            }
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+
+    async function quickMove(id, val) {
+        const fd = new FormData();
+        fd.append('participant_id', id);
+        fd.append('slot_group', val);
+        await fetch(apiUrl+'/set-slot',{method:'POST', body:fd});
+        loadQueue();
+    }
+
+    async function bulkMove() {
+        if (selectedIds.size === 0) return;
+        const val = document.getElementById('bulkTargetSlot').value;
+        if (val === '') return;
+        const fd = new FormData();
+        fd.append('participant_ids', Array.from(selectedIds).join(','));
+        fd.append('slot_group', parseInt(val));
+        await fetch(apiUrl+'/set-slot-batch', {method:'POST', body:fd});
+        selectedIds.clear();
+        loadQueue();
+    }
+
+    async function callNext() { await fetch(apiUrl+'/next',{method:'POST'}); loadQueue(); }
+    async function serve(id) {
+        lastAction = {type:'serve', id};
+        showUndo('Человек обслужён');
+        await fetch(apiUrl+'/serve/'+id,{method:'POST'});
+        loadQueue();
+    }
+    async function skip(id) {
+        lastAction = {type:'skip', id};
+        showUndo('Человек пропущен');
+        await fetch(apiUrl+'/skip/'+id,{method:'POST'});
+        loadQueue();
+    }
+    async function undoAction(id) {
+        await fetch(apiUrl+'/undo/'+id,{method:'POST'});
+        loadQueue();
+    }
+    async function undoLast() {
+        if (!lastAction) return;
+        await fetch(apiUrl+'/undo/'+lastAction.id,{method:'POST'});
+        lastAction = null;
+        document.getElementById('undoBar').style.display='none';
+        loadQueue();
+    }
+    function showUndo(text) {
+        document.getElementById('undoBar').style.display='flex';
+        document.getElementById('undoText').textContent=text;
+        setTimeout(()=>{ document.getElementById('undoBar').style.display='none'; }, 8000);
+    }
+    async function pauseQueue() { await fetch(apiUrl+'/pause',{method:'POST'}); loadQueue(); }
+    async function resumeQueue() { await fetch(apiUrl+'/resume',{method:'POST'}); loadQueue(); }
+    async function reopenQueue() { await fetch(apiUrl+'/reopen',{method:'POST'}); loadQueue(); }
+    async function closeQueue() { if (!confirm('Закрыть очередь?')) return; await fetch(apiUrl+'/close',{method:'POST'}); loadQueue(); }
+    async function acceptSwap(id) { await fetch(apiUrl+'/swap/'+id+'/accept',{method:'POST'}); loadQueue(); }
+    async function rejectSwap(id) { await fetch(apiUrl+'/swap/'+id+'/reject',{method:'POST'}); loadQueue(); }
+
+    document.getElementById('settingsForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const fd = new FormData(this);
+        if (!fd.has('max_size')) fd.append('max_size', '{{ queue.max_size }}');
+        await fetch(apiUrl+'/update-settings',{method:'POST', body:fd});
+        showCopied('Сохранено');
+    });
+
+    function copyText(text) {
+        navigator.clipboard.writeText(text).then(() => showCopied('Скопировано'));
+    }
+    function showCopied(msg) {
+        const el = document.getElementById('codeHint');
+        if (el) { el.textContent = msg; el.classList.add('copy-success'); setTimeout(()=>{ el.textContent='нажмите чтобы скопировать'; el.classList.remove('copy-success'); }, 2000); }
+    }
+    function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+    loadQueue();
+    setInterval(loadQueue, 3000);
+    </script>
+</body>
+</html>

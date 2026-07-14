@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inline</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="landing">
+        <div class="hero">
+            <div class="logo">Inline</div>
+            <p class="tagline">Очередь онлайн.</p>
+        </div>
+
+        <div id="savedQueues" class="saved-queues" style="display:none;">
+            <h3>Ваши очереди</h3>
+            <div id="savedList"></div>
+        </div>
+
+        <div class="roles">
+            <a href="/create" class="role-card organizer">
+                <div class="role-icon">&#9881;</div>
+                <h2>Создать очередь</h2>
+                <p>Настройте и поделитесь ссылкой</p>
+            </a>
+            <div class="role-divider">или</div>
+            <div class="role-card participant" id="joinCard">
+                <div class="role-icon">&#9734;</div>
+                <h2>Вступить в очередь</h2>
+                <p>Введите 4-значный код</p>
+                <div class="join-input-wrap" id="joinInputWrap">
+                    <input type="text" id="joinCode" placeholder="0000" class="input code-input" maxlength="4" inputmode="numeric" pattern="[0-9]*">
+                    <button onclick="goJoin()" class="btn btn-primary btn-sm">Войти</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature"><h3>&#9889; Быстро</h3><p>Очередь за 10 секунд</p></div>
+            <div class="feature"><h3>&#128274; Просто</h3><p>Без регистраций</p></div>
+            <div class="feature"><h3>&#128241; Удобно</h3><p>QR-код или 4-значный код</p></div>
+        </div>
+    </div>
+    <script>
+        function goJoin() {
+            const code = document.getElementById('joinCode').value.trim();
+            if (/^\d{4}$/.test(code)) {
+                fetch('/api/queue/by-code/' + code).then(r => r.json()).then(d => {
+                    if (d.queue_id) window.location.href = '/join/' + d.queue_id;
+                    else alert('Очередь не найдена');
+                }).catch(() => alert('Ошибка'));
+            }
+        }
+        document.getElementById('joinCode').addEventListener('keydown', function(e) { if (e.key === 'Enter') goJoin(); });
+        function loadSaved() {
+            const saved = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('admin_')) {
+                    try { const d = JSON.parse(localStorage.getItem(key)); saved.push({type:'o',id:d.id,token:d.token,name:d.name||d.id}); } catch(e) {}
+                }
+                if (key.startsWith('user_token_')) {
+                    const qid = key.replace('user_token_', '');
+                    saved.push({type:'p',id:qid,name:localStorage.getItem('name_'+qid)||qid});
+                }
+            }
+            if (!saved.length) return;
+            document.getElementById('savedQueues').style.display = 'block';
+            let html = '';
+            for (const s of saved) {
+                const href = s.type === 'o' ? '/admin/'+s.id+'?token='+s.token : '/queue/'+s.id;
+                const badge = s.type === 'o' ? '<span class="saved-badge">Организатор</span>' : '<span class="saved-badge badge-blue">Участник</span>';
+                html += '<a href="'+href+'" class="saved-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-arrow">&rarr;</span></a>';
+            }
+            document.getElementById('savedList').innerHTML = html;
+        }
+        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        loadSaved();
+    </script>
+</body>
+</html>
