@@ -21,14 +21,14 @@
 docker compose up --build
 ```
 
-Приложение будет доступно на `http://localhost:8000`.
+Приложение будет доступно на `http://localhost:9000`.
 
 ### Локально (без Docker)
 
 ```bash
 cd app
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 9000
 ```
 
 ## Структура проекта
