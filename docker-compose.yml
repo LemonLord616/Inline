@@ -2,7 +2,7 @@ services:
   web:
     build: .
     ports:
-      - "8080:8000"
+      - "9000:8000"
     volumes:
       - ./app:/app
       - ./data:/app/data
