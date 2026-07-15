@@ -4,7 +4,6 @@ services:
     ports:
       - "9000:8000"
     volumes:
-      - ./app:/app
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./data/inline.db
