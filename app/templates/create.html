@@ -25,13 +25,16 @@
                         <label for="max_size">Максимум людей</label>
                         <input type="number" id="max_size" name="max_size" class="input" value="50" min="2" max="500">
                     </div>
-                    <div class="form-group flex-1">
+                    <div class="form-group flex-1" id="maxPerSlotGroup">
                         <label for="max_per_slot">Человек в слоте</label>
                         <input type="number" id="max_per_slot" name="max_per_slot" class="input" value="1" min="1" max="100">
                         <span class="hint">Сколько людей на одно время</span>
                     </div>
                 </div>
-                <div class="slot-settings">
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" checked><span>Разрешить "задерживаюсь"</span></label></div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap"><span>Разрешить смену слота/места</span></label></div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="use_time_slots" checked id="useTimeSlots" onchange="toggleTimeSlots()"><span>С тайм-слотами</span></label></div>
+                <div class="slot-settings" id="slotSettingsBlock">
                     <h3>Слоты</h3>
                     <div class="form-row">
                         <div class="form-group flex-1">
@@ -40,7 +43,7 @@
                         </div>
                         <div class="form-group flex-1">
                             <label for="slot_duration_minutes">Длит. слота (мин)</label>
-                            <input type="number" id="slot_duration_minutes" name="slot_duration_minutes" class="input" value="30" min="5" max="480">
+                            <input type="number" id="slot_duration_minutes" name="slot_duration_minutes" class="input" value="30" min="1" max="480">
                         </div>
                     </div>
                 </div>
@@ -59,13 +62,16 @@
                         <label class="radio-label"><input type="radio" name="latecomer_policy" value="discard"><span>Удалить</span></label>
                     </div>
                 </div>
-                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" checked><span>Разрешить "задерживаюсь"</span></label></div>
-                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap"><span>Разрешить смену слота/места</span></label></div>
                 <button type="submit" class="btn btn-primary btn-block">Создать</button>
             </form>
         </div>
     </div>
     <script>
+        function toggleTimeSlots() {
+            const checked = document.getElementById('useTimeSlots').checked;
+            document.getElementById('slotSettingsBlock').style.display = checked ? 'block' : 'none';
+            document.getElementById('maxPerSlotGroup').style.display = checked ? 'flex' : 'none';
+        }
         document.getElementById('createForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const fd = new FormData(this);

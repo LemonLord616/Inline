@@ -18,6 +18,11 @@
             <div id="savedList"></div>
         </div>
 
+        <details id="deletedQueues" class="deleted-details" style="display:none;">
+            <summary class="deleted-summary">Удалённые очереди</summary>
+            <div id="deletedList" class="deleted-body"></div>
+        </details>
+
         <div class="roles">
             <a href="/create" class="role-card organizer">
                 <div class="role-icon">&#9881;</div>
@@ -53,30 +58,115 @@
             }
         }
         document.getElementById('joinCode').addEventListener('keydown', function(e) { if (e.key === 'Enter') goJoin(); });
-        function loadSaved() {
-            const saved = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
+
+        function removeSaved(idx) {
+            var saved = [];
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
                 if (key.startsWith('admin_')) {
-                    try { const d = JSON.parse(localStorage.getItem(key)); saved.push({type:'o',id:d.id,token:d.token,name:d.name||d.id}); } catch(e) {}
+                    try { var d = JSON.parse(localStorage.getItem(key)); if (!d._deleted) saved.push({type:'o',storageKey:key}); } catch(e) {}
                 }
                 if (key.startsWith('user_token_')) {
-                    const qid = key.replace('user_token_', '');
-                    saved.push({type:'p',id:qid,name:localStorage.getItem('name_'+qid)||qid});
+                    var qid = key.replace('user_token_', '');
+                    if (!localStorage.getItem('_deleted_' + qid)) saved.push({type:'p',id:qid,storageKey:key,nameKey:'name_'+qid});
                 }
             }
-            if (!saved.length) return;
-            document.getElementById('savedQueues').style.display = 'block';
-            let html = '';
-            for (const s of saved) {
-                const href = s.type === 'o' ? '/admin/'+s.id+'?token='+s.token : '/queue/'+s.id;
-                const badge = s.type === 'o' ? '<span class="saved-badge">Организатор</span>' : '<span class="saved-badge badge-blue">Участник</span>';
-                html += '<a href="'+href+'" class="saved-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-arrow">&rarr;</span></a>';
+            if (idx < 0 || idx >= saved.length) return;
+            var item = saved[idx];
+            if (item.type === 'o') {
+                var data = JSON.parse(localStorage.getItem(item.storageKey));
+                data._deleted = true;
+                localStorage.setItem(item.storageKey, JSON.stringify(data));
+            } else {
+                localStorage.removeItem(item.storageKey);
+                localStorage.removeItem(item.nameKey);
+                localStorage.setItem('_deleted_' + item.id, '1');
             }
-            document.getElementById('savedList').innerHTML = html;
+            loadSaved();
         }
-        function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        function loadSaved() {
+            var saved = [];
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key.startsWith('admin_')) {
+                    try { var d = JSON.parse(localStorage.getItem(key)); if (!d._deleted) saved.push({type:'o',id:d.id,token:d.token,name:d.name||d.id,storageKey:key,idx:i}); } catch(e) {}
+                }
+                if (key.startsWith('user_token_')) {
+                    var qid = key.replace('user_token_', '');
+                    if (!localStorage.getItem('_deleted_' + qid)) saved.push({type:'p',id:qid,name:localStorage.getItem('name_'+qid)||qid,storageKey:'user_token_'+qid,idx:i});
+                }
+            }
+            var box = document.getElementById('savedQueues');
+            var list = document.getElementById('savedList');
+            if (!saved.length) { box.style.display = 'none'; list.innerHTML = ''; return; }
+            box.style.display = 'block';
+            var html = '';
+            for (var j = 0; j < saved.length; j++) {
+                var s = saved[j];
+                var href = s.type === 'o' ? '/admin/'+s.id+'?token='+s.token : '/queue/'+s.id;
+                var badge = s.type === 'o' ? '<span class="saved-badge">Организатор</span>' : '<span class="saved-badge badge-blue">Участник</span>';
+                html += '<a href="'+href+'" class="saved-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-remove" onclick="removeSaved('+j+');return false;" title="Удалить">&times;</span><span class="saved-arrow">&rarr;</span></a>';
+            }
+            list.innerHTML = html;
+        }
+
+        function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+        function loadDeleted() {
+            var deleted = [];
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key.startsWith('admin_')) {
+                    try { var d = JSON.parse(localStorage.getItem(key)); if (d._deleted) deleted.push({type:'o',id:d.id,token:d.token,name:d.name||d.id,storageKey:key}); } catch(e) {}
+                }
+                if (key.startsWith('_deleted_')) {
+                    var qid = key.replace('_deleted_', '');
+                    deleted.push({type:'p',id:qid,name:localStorage.getItem('name_'+qid)||qid});
+                }
+            }
+            var box = document.getElementById('deletedQueues');
+            var list = document.getElementById('deletedList');
+            var summary = box.querySelector('.deleted-summary');
+            if (!deleted.length) { box.style.display = 'none'; list.innerHTML = ''; return; }
+            box.style.display = '';
+            summary.textContent = 'Удалённые очереди (' + deleted.length + ')';
+            var html = '';
+            for (var j = 0; j < deleted.length; j++) {
+                var s = deleted[j];
+                var badge = s.type === 'o' ? '<span class="saved-badge badge-gray">Организатор</span>' : '<span class="saved-badge badge-gray">Участник</span>';
+                html += '<div class="saved-item deleted-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-restore" onclick="restoreDeleted('+j+');return false;" title="Восстановить">&#8634;</span></div>';
+            }
+            list.innerHTML = html;
+        }
+
+        function restoreDeleted(idx) {
+            var deleted = [];
+            for (var i = 0; i < localStorage.length; i++) {
+                var key = localStorage.key(i);
+                if (key.startsWith('admin_')) {
+                    try { var d = JSON.parse(localStorage.getItem(key)); if (d._deleted) deleted.push({type:'o',storageKey:key}); } catch(e) {}
+                }
+                if (key.startsWith('_deleted_')) {
+                    var qid = key.replace('_deleted_', '');
+                    deleted.push({type:'p',id:qid,nameKey:'name_'+qid});
+                }
+            }
+            if (idx < 0 || idx >= deleted.length) return;
+            var item = deleted[idx];
+            if (item.type === 'o') {
+                var data = JSON.parse(localStorage.getItem(item.storageKey));
+                delete data._deleted;
+                localStorage.setItem(item.storageKey, JSON.stringify(data));
+            } else {
+                localStorage.removeItem('_deleted_' + item.id);
+            }
+            loadSaved();
+            loadDeleted();
+        }
+
         loadSaved();
+        loadDeleted();
     </script>
 </body>
 </html>

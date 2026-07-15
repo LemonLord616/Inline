@@ -45,7 +45,7 @@ async def queue_view(request: Request, queue_id: str, db: AsyncSession = Depends
     queue = await db.get(Queue, queue_id)
     if not queue:
         return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
-    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    base_url = os.getenv("BASE_URL", "http://localhost:9000")
     share_url = f"{base_url}/join/{queue.id}"
     qr_svg = gen_qr_svg(share_url)
     return templates.TemplateResponse("queue.html", {
@@ -58,7 +58,7 @@ async def admin_view(request: Request, queue_id: str, token: str, db: AsyncSessi
     queue = await db.get(Queue, queue_id)
     if not queue or queue.organizer_token != token:
         return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
-    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    base_url = os.getenv("BASE_URL", "http://localhost:9000")
     share_url = f"{base_url}/join/{queue.id}"
     qr_svg = gen_qr_svg(share_url)
     return templates.TemplateResponse("admin.html", {

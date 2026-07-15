@@ -8,5 +8,5 @@ services:
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./data/inline.db
       - SECRET_KEY=inline-secret-key-change-in-production
-      - BASE_URL=http://localhost:8000
+      - BASE_URL=http://localhost:9000
     restart: unless-stopped

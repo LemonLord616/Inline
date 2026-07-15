@@ -44,7 +44,9 @@
                     {% if queue.status.value != 'closed' %}
                     <button class="btn btn-danger btn-sm" onclick="closeQueue()">Закрыть</button>
                     {% endif %}
-                    <button class="btn btn-primary" onclick="callNext()">Вызвать следующего</button>
+                    <button class="btn btn-primary btn-sm" onclick="callNext()">Вызвать следующего</button>
+                    <button class="btn btn-secondary btn-sm" onclick="exportExcel()">Экспорт XLSX</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteQueue()">Удалить очередь</button>
                 </div>
             </div>
 
@@ -52,14 +54,15 @@
                 <details>
                     <summary class="settings-toggle">Настройки</summary>
                     <form id="settingsForm" class="form compact">
+                        <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="use_time_slots" {{ 'checked' if queue.use_time_slots is none or queue.use_time_slots else '' }} id="useTimeSlots" onchange="toggleTimeSlotsSettings()"><span>С тайм-слотами</span></label></div>
+                        <div id="slotSettingsBlock" style="{{ '' if queue.use_time_slots is none or queue.use_time_slots else 'display:none' }}">
                         <div class="form-row">
                             <div class="form-group flex-1"><label>Начало</label><input type="time" name="start_time" class="input" value="{{ queue.start_time or '09:00' }}"></div>
-                            <div class="form-group flex-1"><label>Длит. слота (мин)</label><input type="number" name="slot_duration_minutes" class="input" value="{{ queue.slot_duration_minutes or 30 }}" min="5" max="480"></div>
+                            <div class="form-group flex-1"><label>Длит. слота (мин)</label><input type="number" name="slot_duration_minutes" class="input" value="{{ queue.slot_duration_minutes or 30 }}" min="1" max="480"></div>
                         </div>
-                        <div class="form-row">
-                            <div class="form-group flex-1"><label>Человек в слоте</label><input type="number" name="max_per_slot" class="input" value="{{ queue.max_per_slot or 1 }}" min="1" max="100"></div>
-                            <div class="form-group flex-1"><label>Макс. людей</label><input type="number" name="max_size" class="input" value="{{ queue.max_size }}" min="2" max="500"></div>
+                        <div class="form-group"><label>Человек в слоте</label><input type="number" name="max_per_slot" class="input" value="{{ queue.max_per_slot or 1 }}" min="1" max="100"></div>
                         </div>
+                        <div class="form-group"><label>Макс. людей</label><input type="number" name="max_size" class="input" value="{{ queue.max_size }}" min="2" max="500"></div>
                         <div class="form-group"><label>Информация для участников</label><textarea name="info" class="input textarea" placeholder="Аудитория, что взять и т.д.">{{ queue.info or '' }}</textarea></div>
                         <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap" {{ 'checked' if queue.allow_swap else '' }}><span>Смена слота/места</span></label></div>
                         <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" {{ 'checked' if queue.allow_delay else '' }}><span>"Задерживаюсь"</span></label></div>
@@ -124,6 +127,11 @@
 
     localStorage.setItem('admin_' + queueId, JSON.stringify({id: queueId, token, name: '{{ queue.name }}'}));
 
+    function toggleTimeSlotsSettings() {
+        const checked = document.getElementById('useTimeSlots').checked;
+        document.getElementById('slotSettingsBlock').style.display = checked ? '' : 'none';
+    }
+
     async function loadQueue() {
         const res = await fetch('/api/queue/' + queueId);
         const data = await res.json();
@@ -135,10 +143,24 @@
         document.getElementById('qStatus').textContent = data.status;
         document.getElementById('qStatus').className = 'status-badge status-' + data.status;
 
+        const useSlots = data.use_time_slots;
+        const slotsSection = document.querySelector('.slots-section');
+        const bulkToolbar = document.getElementById('bulkToolbar');
+
+        if (!useSlots) {
+            if (slotsSection) slotsSection.querySelector('.slots-header').style.display = 'none';
+            if (slotsSection) document.getElementById('slotOverview').style.display = 'none';
+            if (bulkToolbar) bulkToolbar.style.display = 'none';
+            activeSlotFilter = null;
+        } else {
+            if (slotsSection) slotsSection.querySelector('.slots-header').style.display = '';
+            if (slotsSection) document.getElementById('slotOverview').style.display = '';
+        }
+
         const waiting = data.participants.filter(p => ['waiting','called','delayed'].includes(p.status));
         document.getElementById('slotCount').textContent = waiting.length + ' в очереди';
 
-        renderSlotOverview(data);
+        if (useSlots) renderSlotOverview(data);
         renderSwapRequests(data);
         renderParticipants(data);
     }
@@ -230,11 +252,16 @@
         let h = '';
         for (const s of swaps) {
             let desc = '';
+            const fromName = esc(s.from_name);
+            const toName = s.to_name ? esc(s.to_name) : '?';
+            const isMutual = s.to_id && (data.pending_swaps || []).some(
+                ms => ms.from_id === s.to_id && ms.to_id === s.from_id && ms.swap_type === s.swap_type && ms.id !== s.id
+            );
+            const arrow = isMutual ? ' ↔ ' : ' → ';
             if (s.swap_type === 'slot_change') {
-                desc = esc(s.from_name) + ' → слот ' + (s.target_slot_label || '?');
+                desc = fromName + arrow + toName + ' (слот)';
             } else {
-                const posHint = s.target_position === 0 ? 'в начало слота' : 'в конец слота';
-                desc = esc(s.from_name) + ' → ' + posHint;
+                desc = fromName + arrow + toName + ' (позиция)';
             }
             h += '<div class="swap-card"><span class="swap-text">'+desc+'</span>';
             h += '<button class="btn btn-primary btn-xs" onclick="acceptSwap(\''+s.id+'\')">Одобрить</button>';
@@ -245,16 +272,17 @@
 
     function renderParticipants(data) {
         let html = '';
+        const useSlots = data.use_time_slots;
         const active = data.participants.filter(p => ['waiting','called','delayed'].includes(p.status));
         const done = data.participants.filter(p => ['served','skipped'].includes(p.status));
 
-        const filtered = activeSlotFilter !== null
+        const filtered = (useSlots && activeSlotFilter !== null)
             ? active.filter(p => p.slot_group === activeSlotFilter)
             : active;
 
         if (filtered.length > 0) {
             html += '<div class="slot-group">';
-            if (activeSlotFilter !== null) {
+            if (useSlots && activeSlotFilter !== null) {
                 const s = (data.slots || [])[activeSlotFilter];
                 html += '<div class="slot-group-header"><span class="slot-group-time">'+(s ? s.label : 'Слот '+(activeSlotFilter+1))+'</span>';
                 html += '<span class="slot-group-count">'+filtered.length+' чел.</span></div>';
@@ -262,7 +290,9 @@
             const allIds = filtered.map(p => p.id);
             const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
 
-            if (!activeSlotFilter && filtered.length > 0) {
+            if (useSlots && !activeSlotFilter && filtered.length > 0) {
+                html += '<div class="slot-group-header"><label class="check-label"><input type="checkbox" '+(allSelected?'checked':'')+' onchange="toggleGroup(this,['+allIds.map(id=>"'"+id+"'").join(',')+'])"></label><span class="slot-group-time">Все участники</span><span class="slot-group-count">'+filtered.length+'</span></div>';
+            } else if (!useSlots && filtered.length > 0) {
                 html += '<div class="slot-group-header"><label class="check-label"><input type="checkbox" '+(allSelected?'checked':'')+' onchange="toggleGroup(this,['+allIds.map(id=>"'"+id+"'").join(',')+'])"></label><span class="slot-group-time">Все участники</span><span class="slot-group-count">'+filtered.length+'</span></div>';
             }
 
@@ -270,11 +300,11 @@
                 html += renderRow(p, false, data);
             }
             html += '</div>';
-        } else if (activeSlotFilter !== null) {
+        } else if (useSlots && activeSlotFilter !== null) {
             html += '<div class="empty">Нет участников в этом слоте</div>';
         }
 
-        if (done.length > 0 && activeSlotFilter === null) {
+        if (done.length > 0 && (!useSlots || activeSlotFilter === null)) {
             html += '<div class="slot-group done-group"><div class="slot-group-header"><span class="slot-group-time">Обслужены / Пропущены</span><span class="slot-group-count">'+done.length+'</span></div>';
             for (const p of done) html += renderRow(p, true, data);
             html += '</div>';
@@ -288,6 +318,7 @@
         const isCalled = p.status === 'called';
         const isDelayed = p.status === 'delayed';
         const checked = selectedIds.has(p.id) ? 'checked' : '';
+        const useSlots = data.use_time_slots;
 
         let cls = 'slot';
         if (isDone) cls += ' slot-done';
@@ -304,12 +335,17 @@
         else if (p.status==='skipped') html += '<span class="status-pill skipped-pill">Пропущен</span>';
         html += '</div>';
         html += '<div class="slot-right">';
-        if (!isDone) {
+        if (!isDone && useSlots) {
             html += '<select class="slot-select" onchange="quickMove(\''+p.id+'\',this.value)">';
             for (const s of (data.slots || [])) {
                 html += '<option value="'+s.index+'" '+(p.slot_group===s.index?'selected':'')+'> '+s.label+'</option>';
             }
             html += '</select>';
+            html += '<div class="slot-actions">';
+            html += '<button class="btn btn-primary btn-xs" onclick="serve(\''+p.id+'\')" title="Обслужён">&#10003;</button>';
+            html += '<button class="btn btn-warning btn-xs" onclick="skip(\''+p.id+'\')" title="Пропустить">&#10007;</button>';
+            html += '</div>';
+        } else if (!isDone) {
             html += '<div class="slot-actions">';
             html += '<button class="btn btn-primary btn-xs" onclick="serve(\''+p.id+'\')" title="Обслужён">&#10003;</button>';
             html += '<button class="btn btn-warning btn-xs" onclick="skip(\''+p.id+'\')" title="Пропустить">&#10007;</button>';
@@ -385,7 +421,8 @@
         const fd = new FormData();
         fd.append('participant_id', id);
         fd.append('slot_group', val);
-        await fetch(apiUrl+'/set-slot',{method:'POST', body:fd});
+        const r = await fetch(apiUrl+'/set-slot',{method:'POST', body:fd});
+        if (!r.ok) { const e = await r.json(); alert(e.detail||'Ошибка'); }
         loadQueue();
     }
 
@@ -396,7 +433,8 @@
         const fd = new FormData();
         fd.append('participant_ids', Array.from(selectedIds).join(','));
         fd.append('slot_group', parseInt(val));
-        await fetch(apiUrl+'/set-slot-batch', {method:'POST', body:fd});
+        const r = await fetch(apiUrl+'/set-slot-batch', {method:'POST', body:fd});
+        if (!r.ok) { const e = await r.json(); alert(e.detail||'Ошибка'); }
         selectedIds.clear();
         loadQueue();
     }
@@ -434,13 +472,29 @@
     async function resumeQueue() { await fetch(apiUrl+'/resume',{method:'POST'}); loadQueue(); }
     async function reopenQueue() { await fetch(apiUrl+'/reopen',{method:'POST'}); loadQueue(); }
     async function closeQueue() { if (!confirm('Закрыть очередь?')) return; await fetch(apiUrl+'/close',{method:'POST'}); loadQueue(); }
-    async function acceptSwap(id) { await fetch(apiUrl+'/swap/'+id+'/accept',{method:'POST'}); loadQueue(); }
+    let pollInterval = null;
+
+    async function deleteQueue() {
+        if (!confirm('Удалить очередь навсегда? Это действие необратимо.')) return;
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        var res = await fetch(apiUrl + '/delete', {method: 'POST'});
+        if (res.ok) {
+            var data = JSON.parse(localStorage.getItem('admin_' + queueId) || '{}');
+            data._deleted = true;
+            localStorage.setItem('admin_' + queueId, JSON.stringify(data));
+            window.location.href = '/';
+        } else {
+            alert('Ошибка удаления');
+            pollInterval = setInterval(loadQueue, 3000);
+        }
+    }
+    function exportExcel() { window.location.href = apiUrl + '/export'; }
+    async function acceptSwap(id) { const r = await fetch(apiUrl+'/swap/'+id+'/accept',{method:'POST'}); if (!r.ok) { const e = await r.json(); alert(e.detail||'Ошибка'); } loadQueue(); }
     async function rejectSwap(id) { await fetch(apiUrl+'/swap/'+id+'/reject',{method:'POST'}); loadQueue(); }
 
     document.getElementById('settingsForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         const fd = new FormData(this);
-        if (!fd.has('max_size')) fd.append('max_size', '{{ queue.max_size }}');
         await fetch(apiUrl+'/update-settings',{method:'POST', body:fd});
         showCopied('Сохранено');
     });
@@ -455,7 +509,7 @@
     function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
     loadQueue();
-    setInterval(loadQueue, 3000);
+    pollInterval = setInterval(loadQueue, 3000);
     </script>
 </body>
 </html>

@@ -53,6 +53,7 @@ class Queue(Base):
     latecomer_policy = Column(SAEnum(LatecomerPolicy), default=LatecomerPolicy.TO_END)
     is_premium = Column(Boolean, default=False)
 
+    use_time_slots = Column(Boolean, default=True)
     slot_duration_minutes = Column(Integer, default=30)
     start_time = Column(String(5), default="09:00")
     max_per_slot = Column(Integer, default=1)

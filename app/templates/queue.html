@@ -29,6 +29,7 @@
 
             <div class="queue-actions" id="queueActions" style="display:none;">
                 <button class="btn btn-outline-warning btn-sm" onclick="markDelayed()">&#9200; Задерживаюсь</button>
+                <button class="btn btn-secondary btn-sm" onclick="leaveQueue()">&#10005; Покинуть очередь</button>
             </div>
 
             <div id="mySwapNotification" class="swap-notification" style="display:none;"></div>
@@ -48,16 +49,14 @@
                         <button class="swap-tab" id="posTab" onclick="setSwapType('position_change',this)">Позиция в слоте</button>
                     </div>
                     <div id="swapSlotPanel">
-                        <label class="form-label">Выберите слот</label>
-                        <select id="swapTargetSlot" class="input"></select>
-                        <button class="btn btn-primary btn-sm" onclick="requestSwap()" style="margin-top:10px;">Отправить запрос</button>
+                        <label class="form-label">Выберите участника для обмена слотом</label>
+                        <select id="swapTargetUser" class="input"></select>
+                        <button class="btn btn-secondary btn-sm" onclick="requestSwap()" style="margin-top:10px;">Отправить запрос</button>
                     </div>
                     <div id="swapPositionPanel" style="display:none;">
-                        <p class="hint" style="margin-bottom:10px;">Куда хотите переместиться?</p>
-                        <div class="pos-buttons">
-                            <button class="btn btn-secondary btn-sm" onclick="requestPositionSwap(0)">В начало слота</button>
-                            <button class="btn btn-secondary btn-sm" onclick="requestPositionSwap(99999)">В конец слота</button>
-                        </div>
+                        <label class="form-label">Выберите участника для обмена позицией</label>
+                        <select id="swapTargetUserPos" class="input"></select>
+                        <button class="btn btn-secondary btn-sm" onclick="requestPositionSwap()" style="margin-top:10px;">Отправить запрос</button>
                     </div>
                 </div>
             </details>
@@ -115,12 +114,23 @@
         }
 
         let html = '';
+        let lastSlotGroup = null;
+        const useSlotsForView = data.use_time_slots;
         for (const p of data.participants) {
             if (!['waiting','called','delayed','served','skipped'].includes(p.status)) continue;
             const isDone = ['served','skipped'].includes(p.status);
             const isCalled = p.status === 'called';
             const isDelayed = p.status === 'delayed';
             const isMe = myToken && p.user_token === myToken;
+
+            if (useSlotsForView && !isDone && p.slot_group !== null && p.slot_group !== lastSlotGroup) {
+                lastSlotGroup = p.slot_group;
+                if (p.slot_label) {
+                    html += '<div class="slot-group-header" style="margin:12px 0 6px;padding:0;"><span class="slot-group-time">' + esc(p.slot_label) + '</span></div>';
+                }
+            } else if (!useSlotsForView || isDone) {
+                lastSlotGroup = null;
+            }
 
             let slotInSlot = '';
             if (!isDone && p.slot_group !== null && slotPeople[p.slot_group]) {
@@ -199,24 +209,41 @@
     function updateSwapSection(data) {
         if (!userToken || !data.allow_swap) { document.getElementById('swapWrap').style.display='none'; return; }
         const me = data.participants.find(p => p.user_token === userToken);
-        if (!me || me.status !== 'waiting') { document.getElementById('swapWrap').style.display='none'; return; }
-        document.getElementById('swapWrap').style.display = 'block';
+        if (!me || (me.status !== 'waiting' && me.status !== 'delayed')) { document.getElementById('swapWrap').style.display='none'; return; }
 
+        const active = data.participants.filter(p => (p.status === 'waiting' || p.status === 'delayed') && p.id !== me.id);
+        const otherSlotUsers = active.filter(p => p.slot_group !== me.slot_group);
+        const sameSlotUsers = active.filter(p => p.slot_group === me.slot_group);
         const maxPer = data.max_per_slot || 1;
-        document.getElementById('posTab').style.display = maxPer > 1 ? '' : 'none';
 
-        if (currentSwapType === 'position_change' && maxPer <= 1) {
+        document.getElementById('posTab').style.display = (maxPer > 1 && sameSlotUsers.length > 0) ? '' : 'none';
+        if (currentSwapType === 'position_change' && (maxPer <= 1 || sameSlotUsers.length === 0)) {
             setSwapType('slot_change', document.querySelector('.swap-tab'));
         }
 
-        const sel = document.getElementById('swapTargetSlot');
+        const hasSwapOptions = otherSlotUsers.length > 0 || (maxPer > 1 && sameSlotUsers.length > 0);
+        if (!hasSwapOptions) { document.getElementById('swapWrap').style.display='none'; return; }
+        document.getElementById('swapWrap').style.display = 'block';
+
+        const sel = document.getElementById('swapTargetUser');
         sel.innerHTML = '';
-        for (const s of (data.slots || [])) {
-            const isCurrent = me.slot_group === s.index;
-            let label = esc(s.label);
-            if (maxPer > 1) label += ' ('+s.count+'/'+s.max+')';
-            if (isCurrent) label += ' — текущий';
-            sel.innerHTML += '<option value="'+s.index+'"'+(isCurrent?' disabled':'')+'>'+label+'</option>';
+        if (otherSlotUsers.length === 0) {
+            sel.innerHTML = '<option value="">Нет доступных участников</option>';
+        } else {
+            for (const p of otherSlotUsers) {
+                const slotLabel = p.slot_label ? ' — ' + esc(p.slot_label) : '';
+                sel.innerHTML += '<option value="'+p.id+'">'+esc(p.name)+slotLabel+'</option>';
+            }
+        }
+
+        const selPos = document.getElementById('swapTargetUserPos');
+        selPos.innerHTML = '';
+        if (sameSlotUsers.length === 0) {
+            selPos.innerHTML = '<option value="">Нет участников в слоте</option>';
+        } else {
+            for (const p of sameSlotUsers) {
+                selPos.innerHTML += '<option value="'+p.id+'">'+esc(p.name)+' (#'+p.position+')</option>';
+            }
         }
     }
 
@@ -229,9 +256,11 @@
         if (mySwap) {
             let desc = '';
             if (mySwap.swap_type === 'slot_change') {
-                desc = 'Запрос: смена слота → ' + (mySwap.target_slot_label || '?');
+                const targetName = mySwap.to_name || '?';
+                desc = 'Запрос: обмен слотом с ' + targetName;
             } else {
-                desc = 'Запрос: смена позиции в слоте';
+                const targetName = mySwap.to_name || '?';
+                desc = 'Запрос: обмен позицией с ' + targetName;
             }
             el.innerHTML = '<span class="swap-notif-text">'+esc(desc)+'</span><button class="btn btn-danger btn-xs" onclick="cancelSwap(\''+mySwap.id+'\')">Отменить</button>';
             el.style.display = 'flex';
@@ -249,30 +278,32 @@
     }
 
     async function requestSwap() {
-        const target = document.getElementById('swapTargetSlot').value;
-        if (target === '') return;
+        const toId = document.getElementById('swapTargetUser').value;
+        if (!toId) return;
         const me = cachedData.participants.find(p => p.user_token === userToken);
         if (!me) return;
         const fd = new FormData();
         fd.append('from_id', me.id);
         fd.append('from_token', userToken);
+        fd.append('to_id', toId);
         fd.append('swap_type', 'slot_change');
-        fd.append('target_slot_group', parseInt(target));
         const r = await fetch('/api/queue/'+queueId+'/swap/request', {method:'POST', body:fd});
-        if (r.ok) loadQueue();
+        if (r.ok) { const res = await r.json(); if (res.status === 'auto_accepted') alert('Обмен совершён!'); loadQueue(); }
         else { const e = await r.json(); alert(e.detail||'Ошибка'); }
     }
 
-    async function requestPositionSwap(targetPos) {
+    async function requestPositionSwap() {
+        const toId = document.getElementById('swapTargetUserPos').value;
+        if (!toId) return;
         const me = cachedData.participants.find(p => p.user_token === userToken);
         if (!me) return;
         const fd = new FormData();
         fd.append('from_id', me.id);
         fd.append('from_token', userToken);
+        fd.append('to_id', toId);
         fd.append('swap_type', 'position_change');
-        fd.append('target_position', targetPos);
         const r = await fetch('/api/queue/'+queueId+'/swap/request', {method:'POST', body:fd});
-        if (r.ok) loadQueue();
+        if (r.ok) { const res = await r.json(); if (res.status === 'auto_accepted') alert('Обмен совершён!'); loadQueue(); }
         else { const e = await r.json(); alert(e.detail||'Ошибка'); }
     }
 
@@ -280,6 +311,19 @@
         const fd = new FormData(); fd.append('user_token', userToken);
         await fetch('/api/queue/'+queueId+'/swap/cancel/'+swapId, {method:'POST', body:fd});
         loadQueue();
+    }
+
+    async function leaveQueue() {
+        if (!confirm('Покинуть очередь? Вы будете удалены из списка.')) return;
+        try {
+            const fd = new FormData();
+            fd.append('user_token', userToken);
+            await fetch('/api/queue/' + queueId + '/leave', { method: 'POST', body: fd });
+        } catch(e) {}
+        localStorage.removeItem('user_token_' + queueId);
+        localStorage.removeItem('name_' + queueId);
+        localStorage.setItem('_deleted_' + queueId, '1');
+        window.location.href = '/';
     }
 
     function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
