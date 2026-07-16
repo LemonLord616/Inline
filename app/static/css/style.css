@@ -320,7 +320,7 @@ a:hover { color: var(--primary-hover); }
     flex-shrink: 0; background: #ffffff; border-radius: var(--radius-sm);
     padding: 8px; display: flex; align-items: center; justify-content: center;
 }
-.share-qr svg { width: 94px; height: 94px; display: block; }
+.share-qr img { width: 94px; height: 94px; display: block; }
 .share-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 
 .code-display { text-align: center; }
@@ -522,7 +522,7 @@ a:hover { color: var(--primary-hover); }
     .form-row { flex-direction: column; }
     .code-value { font-size: 22px; letter-spacing: 3px; }
     .share-row { flex-direction: column; text-align: center; }
-    .share-qr svg { width: 100px; height: 100px; }
+    .share-qr img { width: 100px; height: 100px; }
     .slot-select { max-width: 100%; }
     .slot-card { min-width: 100px; }
 }

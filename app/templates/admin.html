@@ -500,7 +500,20 @@
     });
 
     function copyText(text) {
-        navigator.clipboard.writeText(text).then(() => showCopied('Скопировано'));
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => showCopied('Скопировано')).catch(() => fallbackCopy(text));
+        } else {
+            fallbackCopy(text);
+        }
+    }
+    function fallbackCopy(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showCopied('Скопировано'); } catch(e) { showCopied('Ошибка'); }
+        document.body.removeChild(ta);
     }
     function showCopied(msg) {
         const el = document.getElementById('codeHint');

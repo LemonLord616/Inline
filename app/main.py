@@ -2,9 +2,12 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 from database import init_db
 from routes import api_router, pages_router
 from tasks import background_loop
+
+load_dotenv()
 
 
 @asynccontextmanager
