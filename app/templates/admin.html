@@ -17,7 +17,7 @@
 
             <div class="share-panel">
                 <div class="share-row">
-                    <div class="share-qr">{{ qr_svg | safe }}</div>
+                    <div class="share-qr"><img src="/api/queue/{{ queue.id }}/qr" alt="QR" style="width:94px;height:94px;display:block;"></div>
                     <div class="share-info">
                         <div class="code-display">
                             <span class="code-label">Код очереди</span>
