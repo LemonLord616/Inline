@@ -154,6 +154,28 @@ a:hover { color: var(--primary-hover); }
 .form-row { display: flex; gap: 12px; }
 .flex-1 { flex: 1; }
 
+/* Top bar */
+.top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.top-bar .back-link { margin-bottom: 0; }
+
+/* Language toggle */
+.lang-toggle {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 4px 12px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-dim);
+    cursor: pointer; transition: all 0.2s; letter-spacing: 1px;
+}
+.lang-toggle:hover { border-color: var(--primary); color: var(--text); }
+
+/* Incoming swap cards */
+.incoming-swaps { margin-bottom: 20px; }
+.incoming-swaps .swap-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px; background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: var(--radius-sm); margin-bottom: 8px; font-size: var(--fs-sm);
+}
+.incoming-swaps .swap-text { flex: 1; }
+
 .slot-settings {
     background: var(--surface2); border-radius: var(--radius-sm);
     padding: 16px; border: 1px solid var(--border);

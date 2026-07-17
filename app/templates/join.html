@@ -5,33 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inline — {{ queue.name }}</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/i18n.js"></script>
 </head>
 <body>
     <div class="page">
-        <a href="/" class="back-link">&larr; Назад</a>
+        <div class="top-bar">
+            <a href="/" class="back-link" data-i18n="back"></a>
+            <div id="langToggle"></div>
+        </div>
         <div class="card">
             <h1>{{ queue.name }}</h1>
             {% if queue.description %}<p class="queue-desc">{{ queue.description }}</p>{% endif %}
             <div class="queue-info-box">
-                <span class="info-tag">Макс: {{ queue.max_size }}</span>
-                {% if queue.allow_swap %}<span class="info-tag tag-green">Обмен вкл.</span>{% endif %}
-                {% if queue.allow_delay %}<span class="info-tag tag-yellow">Задержки</span>{% endif %}
+                <span class="info-tag" id="maxTag"></span>
+                {% if queue.allow_swap %}<span class="info-tag tag-green" data-i18n="swapEnabled"></span>{% endif %}
+                {% if queue.allow_delay %}<span class="info-tag tag-yellow" data-i18n="delayEnabled"></span>{% endif %}
             </div>
             <div id="alreadyJoined" style="display:none;" class="already-joined">
-                <p>Вы уже в очереди</p>
-                <a id="continueLink" href="#" class="btn btn-primary btn-block">Продолжить</a>
-                <button class="btn btn-secondary btn-block" onclick="leaveQueue()" style="margin-top:8px;">Войти как другой</button>
+                <p data-i18n="alreadyJoined"></p>
+                <a id="continueLink" href="#" class="btn btn-primary btn-block" data-i18n="continue"></a>
+                <button class="btn btn-secondary btn-block" onclick="leaveQueue()" style="margin-top:8px;" data-i18n="loginOther"></button>
             </div>
             <form id="joinForm" class="form">
                 <div class="form-group">
-                    <label for="name">Ваше имя *</label>
-                    <input type="text" id="name" name="name" class="input" required placeholder="Как к вам обращаться?">
+                    <label for="name" data-i18n="yourName"></label>
+                    <input type="text" id="name" name="name" class="input" required data-i18n-placeholder="namePlaceholder2">
                 </div>
-                <button type="submit" class="btn btn-primary btn-block">Встать в очередь</button>
+                <button type="submit" class="btn btn-primary btn-block" data-i18n="joinBtn"></button>
             </form>
         </div>
     </div>
     <script>
+        document.getElementById('langToggle').innerHTML = langToggleHTML();
+        translatePage();
+        document.getElementById('maxTag').textContent = t('max') + ' {{ queue.max_size }}';
+
         const queueId = '{{ queue.id }}';
         const existing = localStorage.getItem('user_token_' + queueId);
         if (existing) { document.getElementById('joinForm').style.display='none'; document.getElementById('alreadyJoined').style.display='block'; document.getElementById('continueLink').href='/queue/'+queueId; }
@@ -42,7 +50,7 @@
             const res = await fetch('/api/queue/'+queueId+'/join', {method:'POST', body:fd});
             const data = await res.json();
             if (res.ok) { localStorage.setItem('user_token_'+queueId, data.user_token); localStorage.setItem('name_'+queueId, fd.get('name')); window.location.href='/queue/'+queueId; }
-            else alert('Ошибка: '+(data.detail||''));
+            else alert(t('error') + ': '+(data.detail||''));
         });
     </script>
 </body>

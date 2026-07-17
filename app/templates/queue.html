@@ -5,10 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inline — {{ queue.name }}</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/i18n.js"></script>
 </head>
 <body>
     <div class="page">
-        <a href="/" class="back-link">&larr; На главную</a>
+        <div class="top-bar">
+            <a href="/" class="back-link" data-i18n="backHome"></a>
+            <div id="langToggle"></div>
+        </div>
         <div class="card">
             <div class="queue-header">
                 <h1 id="qName">{{ queue.name }}</h1>
@@ -19,7 +23,7 @@
 
             <div class="my-position-box" id="myPositionBox" style="display:none;">
                 <div class="position-number" id="myPosition">-</div>
-                <div class="position-label" id="myPositionLabel">Ваша позиция</div>
+                <div class="position-label" id="myPositionLabel" data-i18n="positionLabel"></div>
                 <div class="position-slot" id="mySlot"></div>
             </div>
 
@@ -28,43 +32,47 @@
             </div>
 
             <div class="queue-actions" id="queueActions" style="display:none;">
-                <button class="btn btn-outline-warning btn-sm" onclick="markDelayed()">&#9200; Задерживаюсь</button>
-                <button class="btn btn-secondary btn-sm" onclick="leaveQueue()">&#10005; Покинуть очередь</button>
+                <button class="btn btn-outline-warning btn-sm" onclick="markDelayed()" data-i18n="delayedBtn">&#9200; </button>
+                <button class="btn btn-secondary btn-sm" onclick="leaveQueue()" data-i18n="leaveQueue">&#10005; </button>
             </div>
 
             <div id="mySwapNotification" class="swap-notification" style="display:none;"></div>
 
+            <div id="incomingSwapsWrap" style="display:none;">
+                <div class="incoming-swaps" id="incomingSwaps"></div>
+            </div>
+
             <div id="calledBanner" class="called-banner" style="display:none;">
                 <span class="called-banner-icon">&#9202;</span>
-                <span class="called-banner-text">Ваша очередь! Подойдите к месту обслуживания.</span>
+                <span class="called-banner-text" data-i18n="itsYourTurn"></span>
             </div>
 
             <div id="swapWrap" style="display:none;">
             <details class="swap-details" open>
-                <summary class="swap-summary">Запросы и обмен</summary>
+                <summary class="swap-summary" data-i18n="swapRequests"></summary>
                 <div class="swap-details-body">
-                    <p class="hint" style="margin-bottom:12px;">Используйте смену слота или позиции только при уважительной причине. Частые запросы создают неудобства для других участников и организатора.</p>
+                    <p class="hint" style="margin-bottom:12px;" data-i18n="swapHint"></p>
                     <div class="swap-type-tabs">
-                        <button class="swap-tab active" onclick="setSwapType('slot_change',this)">Сменить слот</button>
-                        <button class="swap-tab" id="posTab" onclick="setSwapType('position_change',this)">Позиция в слоте</button>
+                        <button class="swap-tab active" onclick="setSwapType('slot_change',this)" data-i18n="swapSlot"></button>
+                        <button class="swap-tab" id="posTab" onclick="setSwapType('position_change',this)" data-i18n="swapPosition"></button>
                     </div>
                     <div id="swapSlotPanel">
-                        <label class="form-label">Выберите участника для обмена слотом</label>
+                        <label class="form-label" data-i18n="selectSwapUser"></label>
                         <select id="swapTargetUser" class="input"></select>
-                        <button class="btn btn-secondary btn-sm" onclick="requestSwap()" style="margin-top:10px;">Отправить запрос</button>
+                        <button class="btn btn-secondary btn-sm" onclick="requestSwap()" style="margin-top:10px;" data-i18n="sendRequest"></button>
                     </div>
                     <div id="swapPositionPanel" style="display:none;">
-                        <label class="form-label">Выберите участника для обмена позицией</label>
+                        <label class="form-label" data-i18n="selectPosUser"></label>
                         <select id="swapTargetUserPos" class="input"></select>
-                        <button class="btn btn-secondary btn-sm" onclick="requestPositionSwap()" style="margin-top:10px;">Отправить запрос</button>
+                        <button class="btn btn-secondary btn-sm" onclick="requestPositionSwap()" style="margin-top:10px;" data-i18n="sendRequest"></button>
                     </div>
                 </div>
             </details>
             </div>
 
             <div class="slots-section">
-                <h3>Расписание</h3>
-                <div class="slots-list" id="slotsList"><div class="loading">Загрузка...</div></div>
+                <h3 data-i18n="schedule"></h3>
+                <div class="slots-list" id="slotsList"><div class="loading" data-i18n="loading"></div></div>
             </div>
         </div>
     </div>
@@ -74,6 +82,9 @@
     const userToken = localStorage.getItem('user_token_' + queueId);
     let currentSwapType = 'slot_change';
     let cachedData = null;
+
+    document.getElementById('langToggle').innerHTML = langToggleHTML();
+    translatePage();
 
     function setSwapType(type, btn) {
         currentSwapType = type;
@@ -100,22 +111,11 @@
 
         const myToken = userToken;
         const me = myToken ? data.participants.find(p => p.user_token === myToken) : null;
-        const mySlotGroup = me ? me.slot_group : -1;
 
-        const slotPeople = {};
-        for (const p of data.participants) {
-            if (!['waiting','called','delayed'].includes(p.status)) continue;
-            const g = p.slot_group;
-            if (!slotPeople[g]) slotPeople[g] = [];
-            slotPeople[g].push(p);
-        }
-        for (const g of Object.keys(slotPeople)) {
-            slotPeople[g].sort((a, b) => a.position - b.position);
-        }
-
+        const useSlotsForView = data.use_time_slots;
         let html = '';
         let lastSlotGroup = null;
-        const useSlotsForView = data.use_time_slots;
+
         for (const p of data.participants) {
             if (!['waiting','called','delayed','served','skipped'].includes(p.status)) continue;
             const isDone = ['served','skipped'].includes(p.status);
@@ -133,10 +133,11 @@
             }
 
             let slotInSlot = '';
-            if (!isDone && p.slot_group !== null && slotPeople[p.slot_group]) {
-                const idx = slotPeople[p.slot_group].findIndex(x => x.id === p.id);
-                if (slotPeople[p.slot_group].length > 1) {
-                    slotInSlot = '#' + (idx + 1) + ' в слоте';
+            if (!isDone && useSlotsForView && p.slot_group !== null) {
+                const slotPeople = data.participants.filter(x => ['waiting','called','delayed'].includes(x.status) && x.slot_group === p.slot_group).sort((a,b)=>a.position-b.position);
+                if (slotPeople.length > 1) {
+                    const idx = slotPeople.findIndex(x => x.id === p.id);
+                    slotInSlot = '#' + (idx + 1) + ' ' + t('inSlot');
                 }
             }
 
@@ -148,23 +149,24 @@
             html += '<div class="'+cls+'">';
             html += '<div class="slot-left">';
             html += '<span class="slot-pos">'+p.position+'</span>';
-            html += '<span class="slot-name">'+esc(p.name)+(isMe?' <span class="you-badge">вы</span>':'')+'</span>';
+            html += '<span class="slot-name">'+esc(p.name)+(isMe?' <span class="you-badge">'+('you' in I18N[getLang()] ? 'you' : '\u044b\u0443')+'</span>':'')+'</span>';
             if (slotInSlot) html += '<span class="slot-in-slot">'+slotInSlot+'</span>';
-            if (isCalled) html += '<span class="status-pill called-pill">Вызван</span>';
-            else if (isDelayed) html += '<span class="status-pill delayed-pill">Задерживается</span>';
-            else if (p.status==='served') html += '<span class="status-pill served-pill">Обслужён</span>';
-            else if (p.status==='skipped') html += '<span class="status-pill skipped-pill">Пропущен</span>';
+            if (isCalled) html += '<span class="status-pill called-pill">'+t('called')+'</span>';
+            else if (isDelayed) html += '<span class="status-pill delayed-pill">'+t('delayed')+'</span>';
+            else if (p.status==='served') html += '<span class="status-pill served-pill">'+t('servedStatus')+'</span>';
+            else if (p.status==='skipped') html += '<span class="status-pill skipped-pill">'+t('skipped')+'</span>';
             html += '</div>';
             html += '<div class="slot-right">';
-            if (p.slot_label) html += '<span class="slot-time-badge">'+esc(p.slot_label)+'</span>';
+            if (useSlotsForView && p.slot_label) html += '<span class="slot-time-badge">'+esc(p.slot_label)+'</span>';
             html += '</div></div>';
         }
-        if (!html) html = '<div class="empty">Пока никого нет</div>';
+        if (!html) html = '<div class="empty">'+t('emptyList')+'</div>';
         document.getElementById('slotsList').innerHTML = html;
 
         updateMyInfo(data);
         updateSwapSection(data);
         checkSwapNotifications(data);
+        checkIncomingSwaps(data);
     }
 
     function updateMyInfo(data) {
@@ -178,24 +180,24 @@
         const slotBox = document.getElementById('mySlot');
         const posLabel = document.getElementById('myPositionLabel');
         if (me.status === 'called') {
-            slotBox.textContent = 'Сейчас ваша очередь!'; slotBox.className = 'position-slot slot-now-text';
-            posLabel.textContent = 'Вызван';
+            slotBox.textContent = t('itsYourTurn'); slotBox.className = 'position-slot slot-now-text';
+            posLabel.textContent = t('youCalled');
         } else if (me.status === 'served') {
-            slotBox.textContent = 'Вы обслужены'; slotBox.className = 'position-slot slot-served-text';
-            posLabel.textContent = 'Статус';
-        } else if (me.slot_label) {
+            slotBox.textContent = t('youServed'); slotBox.className = 'position-slot slot-served-text';
+            posLabel.textContent = t('statusWaiting');
+        } else if (me.slot_label && data.use_time_slots) {
             slotBox.textContent = me.slot_label; slotBox.className = 'position-slot';
             const slotPeople = data.participants.filter(p => ['waiting','called','delayed'].includes(p.status) && p.slot_group === me.slot_group).sort((a,b)=>a.position-b.position);
             if (slotPeople.length > 1) {
                 const myIdx = slotPeople.findIndex(p => p.user_token === userToken);
-                posLabel.textContent = 'Позиция в слоте: ' + (myIdx + 1) + ' из ' + slotPeople.length;
+                posLabel.textContent = t('positionInSlot') + ' ' + (myIdx + 1) + ' / ' + slotPeople.length;
             } else {
-                posLabel.textContent = 'Ваш слот';
+                posLabel.textContent = t('yourSlot');
             }
         }
 
         const statusTag = document.getElementById('myStatus');
-        const map = {waiting:{t:'Ожидает',c:''},called:{t:'Вызван',c:'tag-blue'},delayed:{t:'Задерживается',c:'tag-yellow'},served:{t:'Обслужён',c:'tag-green'},skipped:{t:'Пропущен',c:'tag-gray'}};
+        const map = {waiting:{t:t('statusWaiting'),c:''},called:{t:t('called'),c:'tag-blue'},delayed:{t:t('delayed'),c:'tag-yellow'},served:{t:t('servedStatus'),c:'tag-green'},skipped:{t:t('skipped'),c:'tag-gray'}};
         const s = map[me.status]||map.waiting;
         statusTag.textContent = s.t; statusTag.className = 'status-tag '+s.c;
 
@@ -212,10 +214,17 @@
         if (!me || (me.status !== 'waiting' && me.status !== 'delayed')) { document.getElementById('swapWrap').style.display='none'; return; }
 
         const active = data.participants.filter(p => (p.status === 'waiting' || p.status === 'delayed') && p.id !== me.id);
-        const otherSlotUsers = active.filter(p => p.slot_group !== me.slot_group);
-        const sameSlotUsers = active.filter(p => p.slot_group === me.slot_group);
-        const maxPer = data.max_per_slot || 1;
 
+        let otherSlotUsers, sameSlotUsers;
+        if (data.use_time_slots) {
+            otherSlotUsers = active.filter(p => p.slot_group !== me.slot_group);
+            sameSlotUsers = active.filter(p => p.slot_group === me.slot_group);
+        } else {
+            otherSlotUsers = active;
+            sameSlotUsers = [];
+        }
+
+        const maxPer = data.max_per_slot || 1;
         document.getElementById('posTab').style.display = (maxPer > 1 && sameSlotUsers.length > 0) ? '' : 'none';
         if (currentSwapType === 'position_change' && (maxPer <= 1 || sameSlotUsers.length === 0)) {
             setSwapType('slot_change', document.querySelector('.swap-tab'));
@@ -228,10 +237,10 @@
         const sel = document.getElementById('swapTargetUser');
         sel.innerHTML = '';
         if (otherSlotUsers.length === 0) {
-            sel.innerHTML = '<option value="">Нет доступных участников</option>';
+            sel.innerHTML = '<option value="">' + t('noParticipants') + '</option>';
         } else {
             for (const p of otherSlotUsers) {
-                const slotLabel = p.slot_label ? ' — ' + esc(p.slot_label) : '';
+                const slotLabel = (data.use_time_slots && p.slot_label) ? ' — ' + esc(p.slot_label) : '';
                 sel.innerHTML += '<option value="'+p.id+'">'+esc(p.name)+slotLabel+'</option>';
             }
         }
@@ -239,7 +248,7 @@
         const selPos = document.getElementById('swapTargetUserPos');
         selPos.innerHTML = '';
         if (sameSlotUsers.length === 0) {
-            selPos.innerHTML = '<option value="">Нет участников в слоте</option>';
+            selPos.innerHTML = '<option value="">' + t('noSlotParticipants2') + '</option>';
         } else {
             for (const p of sameSlotUsers) {
                 selPos.innerHTML += '<option value="'+p.id+'">'+esc(p.name)+' (#'+p.position+')</option>';
@@ -254,19 +263,54 @@
         if (!me) { el.style.display='none'; return; }
         const mySwap = (data.pending_swaps||[]).find(s => s.from_id === me.id);
         if (mySwap) {
-            let desc = '';
+            let desc = t('yourRequest') + ' ';
+            const targetName = mySwap.to_name || '?';
             if (mySwap.swap_type === 'slot_change') {
-                const targetName = mySwap.to_name || '?';
-                desc = 'Запрос: обмен слотом с ' + targetName;
+                desc += targetName + ' (' + t('swapSlot') + ')';
             } else {
-                const targetName = mySwap.to_name || '?';
-                desc = 'Запрос: обмен позицией с ' + targetName;
+                desc += targetName + ' (' + t('swapPosition') + ')';
             }
-            el.innerHTML = '<span class="swap-notif-text">'+esc(desc)+'</span><button class="btn btn-danger btn-xs" onclick="cancelSwap(\''+mySwap.id+'\')">Отменить</button>';
+            el.innerHTML = '<span class="swap-notif-text">'+esc(desc)+'</span><button class="btn btn-danger btn-xs" onclick="cancelSwap(\''+mySwap.id+'\')">'+t('cancel')+'</button>';
             el.style.display = 'flex';
         } else {
             el.style.display = 'none';
         }
+    }
+
+    function checkIncomingSwaps(data) {
+        if (!userToken) return;
+        const wrap = document.getElementById('incomingSwapsWrap');
+        const el = document.getElementById('incomingSwaps');
+        const me = data.participants.find(p => p.user_token === userToken);
+        if (!me) { wrap.style.display='none'; return; }
+        const incoming = (data.pending_swaps||[]).filter(s => s.to_id === me.id);
+        if (incoming.length === 0) { wrap.style.display='none'; return; }
+        wrap.style.display='block';
+        let h = '';
+        for (const s of incoming) {
+            const fromName = esc(s.from_name);
+            let desc = t('incomingSwap') + ': ' + fromName;
+            if (s.swap_type === 'slot_change') desc += ' (' + t('swapSlot') + ')';
+            else desc += ' (' + t('swapPosition') + ')';
+            h += '<div class="swap-card"><span class="swap-text">'+esc(desc)+'</span>';
+            h += '<button class="btn btn-primary btn-xs" onclick="acceptSwap(\''+s.id+'\')">'+t('accept')+'</button>';
+            h += '<button class="btn btn-danger btn-xs" onclick="rejectSwap(\''+s.id+'\')">'+t('reject')+'</button></div>';
+        }
+        el.innerHTML = h;
+    }
+
+    async function acceptSwap(swapId) {
+        const fd = new FormData(); fd.append('user_token', userToken);
+        const r = await fetch('/api/queue/'+queueId+'/swap/accept/'+swapId, {method:'POST', body:fd});
+        if (r.ok) { alert(t('swapDone')); }
+        else { const e = await r.json(); alert(e.detail||t('error')); }
+        loadQueue();
+    }
+
+    async function rejectSwap(swapId) {
+        const fd = new FormData(); fd.append('user_token', userToken);
+        await fetch('/api/queue/'+queueId+'/swap/reject/'+swapId, {method:'POST', body:fd});
+        loadQueue();
     }
 
     async function markDelayed() {
@@ -288,8 +332,8 @@
         fd.append('to_id', toId);
         fd.append('swap_type', 'slot_change');
         const r = await fetch('/api/queue/'+queueId+'/swap/request', {method:'POST', body:fd});
-        if (r.ok) { const res = await r.json(); if (res.status === 'auto_accepted') alert('Обмен совершён!'); loadQueue(); }
-        else { const e = await r.json(); alert(e.detail||'Ошибка'); }
+        if (r.ok) { const res = await r.json(); if (res.status === 'auto_accepted') alert(t('swapDone')); loadQueue(); }
+        else { const e = await r.json(); alert(e.detail||t('error')); }
     }
 
     async function requestPositionSwap() {
@@ -303,8 +347,8 @@
         fd.append('to_id', toId);
         fd.append('swap_type', 'position_change');
         const r = await fetch('/api/queue/'+queueId+'/swap/request', {method:'POST', body:fd});
-        if (r.ok) { const res = await r.json(); if (res.status === 'auto_accepted') alert('Обмен совершён!'); loadQueue(); }
-        else { const e = await r.json(); alert(e.detail||'Ошибка'); }
+        if (r.ok) { const res = await r.json(); if (res.status === 'auto_accepted') alert(t('swapDone')); loadQueue(); }
+        else { const e = await r.json(); alert(e.detail||t('error')); }
     }
 
     async function cancelSwap(swapId) {
@@ -314,7 +358,7 @@
     }
 
     async function leaveQueue() {
-        if (!confirm('Покинуть очередь? Вы будете удалены из списка.')) return;
+        if (!confirm(t('confirmLeave'))) return;
         try {
             const fd = new FormData();
             fd.append('user_token', userToken);

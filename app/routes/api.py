@@ -102,7 +102,9 @@ async def get_queue(queue_id: str, db: AsyncSession = Depends(get_db)):
     queue = await db.get(Queue, queue_id)
     if not queue:
         raise HTTPException(404, "Queue not found")
-    if queue.use_time_slots if queue.use_time_slots is not None else True:
+    use_slots = queue.use_time_slots if queue.use_time_slots is not None else True
+
+    if use_slots:
         result = await db.execute(
             select(Participant).where(Participant.queue_id == queue_id).order_by(
                 Participant.slot_group.asc(),
@@ -118,7 +120,6 @@ async def get_queue(queue_id: str, db: AsyncSession = Depends(get_db)):
     slot_dur = queue.slot_duration_minutes or 30
     start_t = queue.start_time or "09:00"
     max_per = queue.max_per_slot or 1
-    use_slots = queue.use_time_slots if queue.use_time_slots is not None else True
 
     slot_data = []
     for p in participants:
@@ -147,20 +148,20 @@ async def get_queue(queue_id: str, db: AsyncSession = Depends(get_db)):
             if p.status == ParticipantStatus.WAITING or p.status == ParticipantStatus.DELAYED:
                 item["slot_label"] = None
             elif p.status == ParticipantStatus.CALLED:
-                item["slot_label"] = "Сейчас"
+                item["slot_label"] = ""
             elif p.status == ParticipantStatus.SERVED:
-                item["slot_label"] = "Обслужён"
+                item["slot_label"] = ""
             elif p.status == ParticipantStatus.SKIPPED:
-                item["slot_label"] = "Пропущен"
+                item["slot_label"] = ""
         else:
             if p.status in (ParticipantStatus.WAITING, ParticipantStatus.DELAYED):
                 item["slot_label"] = f"{slot_start} – {slot_end}"
             elif p.status == ParticipantStatus.CALLED:
-                item["slot_label"] = "Сейчас"
+                item["slot_label"] = ""
             elif p.status == ParticipantStatus.SERVED:
-                item["slot_label"] = "Обслужён"
+                item["slot_label"] = ""
             elif p.status == ParticipantStatus.SKIPPED:
-                item["slot_label"] = "Пропущен"
+                item["slot_label"] = ""
 
         slot_data.append(item)
 
@@ -460,12 +461,23 @@ async def update_settings(
     queue.allow_delay = allow_delay
     queue.safe_window_minutes = safe_window_minutes
     queue.latecomer_policy = LatecomerPolicy(latecomer_policy)
-    queue.use_time_slots = use_time_slots
     queue.slot_duration_minutes = slot_duration_minutes
     queue.start_time = start_time
     queue.max_per_slot = max(max_per_slot, 1)
     queue.max_size = max(max_size, 2)
     queue.info = info if info.strip() else None
+
+    if queue.use_time_slots and not use_time_slots:
+        result = await db.execute(
+            select(Participant).where(
+                Participant.queue_id == queue_id,
+                Participant.status.in_([ParticipantStatus.WAITING, ParticipantStatus.CALLED, ParticipantStatus.DELAYED]),
+            )
+        )
+        for p in result.scalars().all():
+            p.slot_group = None
+
+    queue.use_time_slots = use_time_slots
     await db.commit()
     return {"ok": True}
 
@@ -642,40 +654,46 @@ async def cancel_swap(queue_id: str, swap_id: str, user_token: str = Form(...), 
     return {"ok": True}
 
 
-@router.post("/queue/{queue_id}/admin/{token}/swap/{swap_id}/accept")
-async def accept_swap(queue_id: str, token: str, swap_id: str, db: AsyncSession = Depends(get_db)):
-    queue = await db.get(Queue, queue_id)
-    if not queue or queue.organizer_token != token:
-        raise HTTPException(403, "Unauthorized")
+@router.post("/queue/{queue_id}/swap/accept/{swap_id}")
+async def participant_accept_swap(queue_id: str, swap_id: str, user_token: str = Form(...), db: AsyncSession = Depends(get_db)):
     swap = await db.get(SwapRequest, swap_id)
     if not swap or swap.queue_id != queue_id or swap.status != "pending":
-        raise HTTPException(404, "Запрос не найден или уже обработан")
+        raise HTTPException(404, "Запрос не найден")
+    to_p = await db.get(Participant, swap.to_participant_id)
+    if not to_p or to_p.user_token != user_token:
+        raise HTTPException(403, "Unauthorized")
+    if to_p.status not in (ParticipantStatus.WAITING, ParticipantStatus.DELAYED):
+        raise HTTPException(400, "Невозможно выполнить обмен")
 
     from_p = await db.get(Participant, swap.from_participant_id)
     if not from_p:
         raise HTTPException(404, "Участник не найден")
+    if from_p.status not in (ParticipantStatus.WAITING, ParticipantStatus.DELAYED):
+        raise HTTPException(400, "Участник недоступен")
+
+    queue = await db.get(Queue, queue_id)
 
     lock = _swap_locks.setdefault(queue_id, asyncio.Lock())
     async with lock:
-        if swap.to_participant_id:
-            to_p = await db.get(Participant, swap.to_participant_id)
-            if not to_p or to_p.queue_id != queue_id:
-                raise HTTPException(404, "Участник не найден")
-
-            if swap.swap_type == "slot_change":
-                if not queue.use_time_slots:
-                    raise HTTPException(400, "Тайм-слоты отключены")
-                from_p.slot_group, to_p.slot_group = to_p.slot_group, from_p.slot_group
-            elif swap.swap_type == "position_change":
-                from_p.position, to_p.position = to_p.position, from_p.position
-        else:
-            if swap.swap_type == "slot_change" and swap.target_slot_group is not None:
-                has_space = await check_slot_capacity(db, queue_id, swap.target_slot_group, queue.max_per_slot or 1)
-                if not has_space:
-                    raise HTTPException(400, "Целевой слот заполнен")
-                from_p.slot_group = swap.target_slot_group
+        if swap.swap_type == "slot_change":
+            if not queue.use_time_slots:
+                raise HTTPException(400, "Тайм-слоты отключены")
+            from_p.slot_group, to_p.slot_group = to_p.slot_group, from_p.slot_group
+        elif swap.swap_type == "position_change":
+            from_p.position, to_p.position = to_p.position, from_p.position
 
         swap.status = "accepted"
+
+        other_incoming = await db.execute(
+            select(SwapRequest).where(
+                SwapRequest.queue_id == queue_id,
+                SwapRequest.to_participant_id == to_p.id,
+                SwapRequest.status == "pending",
+                SwapRequest.id != swap.id,
+            )
+        )
+        for other in other_incoming.scalars().all():
+            other.status = "rejected"
 
         pos_result = await db.execute(
             select(Participant).where(
@@ -691,14 +709,14 @@ async def accept_swap(queue_id: str, token: str, swap_id: str, db: AsyncSession 
         return {"ok": True}
 
 
-@router.post("/queue/{queue_id}/admin/{token}/swap/{swap_id}/reject")
-async def reject_swap(queue_id: str, token: str, swap_id: str, db: AsyncSession = Depends(get_db)):
-    queue = await db.get(Queue, queue_id)
-    if not queue or queue.organizer_token != token:
-        raise HTTPException(403, "Unauthorized")
+@router.post("/queue/{queue_id}/swap/reject/{swap_id}")
+async def participant_reject_swap(queue_id: str, swap_id: str, user_token: str = Form(...), db: AsyncSession = Depends(get_db)):
     swap = await db.get(SwapRequest, swap_id)
     if not swap or swap.queue_id != queue_id:
         raise HTTPException(404, "Запрос не найден")
+    to_p = await db.get(Participant, swap.to_participant_id)
+    if not to_p or to_p.user_token != user_token:
+        raise HTTPException(403, "Unauthorized")
     if swap.status != "pending":
         raise HTTPException(400, "Запрос уже обработан")
     swap.status = "rejected"

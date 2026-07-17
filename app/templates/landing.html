@@ -5,56 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inline</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/i18n.js"></script>
 </head>
 <body>
     <div class="landing">
         <div class="hero">
             <div class="logo">Inline</div>
-            <p class="tagline">Очередь онлайн.</p>
+            <p class="tagline" data-i18n="welcome"></p>
+            <div id="langToggle" style="margin-top:12px;"></div>
         </div>
 
         <div id="savedQueues" class="saved-queues" style="display:none;">
-            <h3>Ваши очереди</h3>
+            <h3 data-i18n="savedQueues"></h3>
             <div id="savedList"></div>
         </div>
 
         <details id="deletedQueues" class="deleted-details" style="display:none;">
-            <summary class="deleted-summary">Удалённые очереди</summary>
+            <summary class="deleted-summary" data-i18n="deletedQueues"></summary>
             <div id="deletedList" class="deleted-body"></div>
         </details>
 
         <div class="roles">
             <a href="/create" class="role-card organizer">
                 <div class="role-icon">&#9881;</div>
-                <h2>Создать очередь</h2>
-                <p>Настройте и поделитесь ссылкой</p>
+                <h2 data-i18n="createQueue"></h2>
+                <p data-i18n="createQueueDesc"></p>
             </a>
-            <div class="role-divider">или</div>
+            <div class="role-divider" data-i18n="or"></div>
             <div class="role-card participant" id="joinCard">
                 <div class="role-icon">&#9734;</div>
-                <h2>Вступить в очередь</h2>
-                <p>Введите 4-значный код</p>
+                <h2 data-i18n="joinQueue"></h2>
+                <p data-i18n="joinQueueDesc"></p>
                 <div class="join-input-wrap" id="joinInputWrap">
                     <input type="text" id="joinCode" placeholder="0000" class="input code-input" maxlength="4" inputmode="numeric" pattern="[0-9]*">
-                    <button onclick="goJoin()" class="btn btn-primary btn-sm">Войти</button>
+                    <button onclick="goJoin()" class="btn btn-primary btn-sm" data-i18n="enter"></button>
                 </div>
             </div>
         </div>
 
         <div class="features">
-            <div class="feature"><h3>&#9889; Быстро</h3><p>Очередь за 10 секунд</p></div>
-            <div class="feature"><h3>&#128274; Просто</h3><p>Без регистраций</p></div>
-            <div class="feature"><h3>&#128241; Удобно</h3><p>QR-код или 4-значный код</p></div>
+            <div class="feature"><h3>&#9889; <span data-i18n="feature1Title"></span></h3><p data-i18n="feature1Desc"></p></div>
+            <div class="feature"><h3>&#128274; <span data-i18n="feature2Title"></span></h3><p data-i18n="feature2Desc"></p></div>
+            <div class="feature"><h3>&#128241; <span data-i18n="feature3Title"></span></h3><p data-i18n="feature3Desc"></p></div>
         </div>
     </div>
     <script>
+        document.getElementById('langToggle').innerHTML = langToggleHTML();
+        translatePage();
+
         function goJoin() {
             const code = document.getElementById('joinCode').value.trim();
             if (/^\d{4}$/.test(code)) {
                 fetch('/api/queue/by-code/' + code).then(r => r.json()).then(d => {
                     if (d.queue_id) window.location.href = '/join/' + d.queue_id;
-                    else alert('Очередь не найдена');
-                }).catch(() => alert('Ошибка'));
+                    else alert(t('notFound'));
+                }).catch(() => alert(t('error')));
             }
         }
         document.getElementById('joinCode').addEventListener('keydown', function(e) { if (e.key === 'Enter') goJoin(); });
@@ -105,8 +110,8 @@
             for (var j = 0; j < saved.length; j++) {
                 var s = saved[j];
                 var href = s.type === 'o' ? '/admin/'+s.id+'?token='+s.token : '/queue/'+s.id;
-                var badge = s.type === 'o' ? '<span class="saved-badge">Организатор</span>' : '<span class="saved-badge badge-blue">Участник</span>';
-                html += '<a href="'+href+'" class="saved-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-remove" onclick="removeSaved('+j+');return false;" title="Удалить">&times;</span><span class="saved-arrow">&rarr;</span></a>';
+                var badge = s.type === 'o' ? '<span class="saved-badge">'+t('organizer')+'</span>' : '<span class="saved-badge badge-blue">'+t('participant')+'</span>';
+                html += '<a href="'+href+'" class="saved-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-remove" onclick="removeSaved('+j+');return false;" title="&times;">&times;</span><span class="saved-arrow">&rarr;</span></a>';
             }
             list.innerHTML = html;
         }
@@ -130,12 +135,12 @@
             var summary = box.querySelector('.deleted-summary');
             if (!deleted.length) { box.style.display = 'none'; list.innerHTML = ''; return; }
             box.style.display = '';
-            summary.textContent = 'Удалённые очереди (' + deleted.length + ')';
+            summary.textContent = t('deletedQueues') + ' (' + deleted.length + ')';
             var html = '';
             for (var j = 0; j < deleted.length; j++) {
                 var s = deleted[j];
-                var badge = s.type === 'o' ? '<span class="saved-badge badge-gray">Организатор</span>' : '<span class="saved-badge badge-gray">Участник</span>';
-                html += '<div class="saved-item deleted-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-restore" onclick="restoreDeleted('+j+');return false;" title="Восстановить">&#8634;</span></div>';
+                var badge = '<span class="saved-badge badge-gray">' + (s.type === 'o' ? t('organizer') : t('participant')) + '</span>';
+                html += '<div class="saved-item deleted-item">'+badge+'<span class="saved-name">'+esc(s.name)+'</span><span class="saved-restore" onclick="restoreDeleted('+j+');return false;" title="&#8634;">&#8634;</span></div>';
             }
             list.innerHTML = html;
         }

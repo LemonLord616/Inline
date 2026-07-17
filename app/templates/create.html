@@ -3,70 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inline — Создать очередь</title>
+    <title>Inline — Create</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/i18n.js"></script>
 </head>
 <body>
     <div class="page">
-        <a href="/" class="back-link">&larr; Назад</a>
+        <div class="top-bar">
+            <a href="/" class="back-link" data-i18n="back"></a>
+            <div id="langToggle"></div>
+        </div>
         <div class="card">
-            <h1>Создать очередь</h1>
+            <h1 data-i18n="createTitle"></h1>
             <form id="createForm" class="form">
                 <div class="form-group">
-                    <label for="name">Название *</label>
-                    <input type="text" id="name" name="name" class="input" required placeholder="Экзамен, заселение...">
+                    <label for="name" data-i18n="nameLabel"></label>
+                    <input type="text" id="name" name="name" class="input" required data-i18n-placeholder="namePlaceholder">
                 </div>
                 <div class="form-group">
-                    <label for="description">Описание</label>
-                    <textarea id="description" name="description" class="input textarea" placeholder="Опционально"></textarea>
+                    <label for="description" data-i18n="descLabel"></label>
+                    <textarea id="description" name="description" class="input textarea" data-i18n-placeholder="descPlaceholder"></textarea>
                 </div>
                 <div class="form-row">
                     <div class="form-group flex-1">
-                        <label for="max_size">Максимум людей</label>
+                        <label for="max_size" data-i18n="maxPeople"></label>
                         <input type="number" id="max_size" name="max_size" class="input" value="50" min="2" max="500">
                     </div>
                     <div class="form-group flex-1" id="maxPerSlotGroup">
-                        <label for="max_per_slot">Человек в слоте</label>
+                        <label for="max_per_slot" data-i18n="perSlot"></label>
                         <input type="number" id="max_per_slot" name="max_per_slot" class="input" value="1" min="1" max="100">
-                        <span class="hint">Сколько людей на одно время</span>
+                        <span class="hint" data-i18n="perSlotHint"></span>
                     </div>
                 </div>
-                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" checked><span>Разрешить "задерживаюсь"</span></label></div>
-                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap"><span>Разрешить смену слота/места</span></label></div>
-                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="use_time_slots" checked id="useTimeSlots" onchange="toggleTimeSlots()"><span>С тайм-слотами</span></label></div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" checked><span data-i18n="allowDelay"></span></label></div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap"><span data-i18n="allowSwap"></span></label></div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="use_time_slots" checked id="useTimeSlots" onchange="toggleTimeSlots()"><span data-i18n="useTimeSlots"></span></label></div>
                 <div class="slot-settings" id="slotSettingsBlock">
-                    <h3>Слоты</h3>
+                    <h3 data-i18n="slotsConfig"></h3>
                     <div class="form-row">
                         <div class="form-group flex-1">
-                            <label for="start_time">Начало</label>
+                            <label for="start_time" data-i18n="startTime"></label>
                             <input type="time" id="start_time" name="start_time" class="input" value="09:00">
                         </div>
                         <div class="form-group flex-1">
-                            <label for="slot_duration_minutes">Длит. слота (мин)</label>
+                            <label for="slot_duration_minutes" data-i18n="slotDuration"></label>
                             <input type="number" id="slot_duration_minutes" name="slot_duration_minutes" class="input" value="30" min="1" max="480">
                         </div>
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="info">Информация для участников</label>
-                    <textarea id="info" name="info" class="input textarea" placeholder="Аудитория 301, взять паспорт, и т.д."></textarea>
+                    <label for="info" data-i18n="participantInfo"></label>
+                    <textarea id="info" name="info" class="input textarea" data-i18n-placeholder="infoPlaceholder"></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="safe_window_minutes">Окно для опоздавших (мин)</label>
+                    <label for="safe_window_minutes" data-i18n="windowLabel"></label>
                     <input type="number" id="safe_window_minutes" name="safe_window_minutes" class="input" value="5" min="0" max="60">
                 </div>
                 <div class="form-group">
-                    <label>Опоздавшие</label>
+                    <label data-i18n="latePolicy"></label>
                     <div class="radio-group">
-                        <label class="radio-label"><input type="radio" name="latecomer_policy" value="to_end" checked><span>В конец очереди</span></label>
-                        <label class="radio-label"><input type="radio" name="latecomer_policy" value="discard"><span>Удалить</span></label>
+                        <label class="radio-label"><input type="radio" name="latecomer_policy" value="to_end" checked><span data-i18n="toEnd"></span></label>
+                        <label class="radio-label"><input type="radio" name="latecomer_policy" value="discard"><span data-i18n="discard"></span></label>
                     </div>
                 </div>
-                <button type="submit" class="btn btn-primary btn-block">Создать</button>
+                <button type="submit" class="btn btn-primary btn-block" data-i18n="create"></button>
             </form>
         </div>
     </div>
     <script>
+        document.getElementById('langToggle').innerHTML = langToggleHTML();
+        translatePage();
+
         function toggleTimeSlots() {
             const checked = document.getElementById('useTimeSlots').checked;
             document.getElementById('slotSettingsBlock').style.display = checked ? 'block' : 'none';
@@ -80,7 +87,7 @@
             if (res.ok) {
                 localStorage.setItem('admin_' + data.queue_id, JSON.stringify({id: data.queue_id, token: data.organizer_token, name: fd.get('name')}));
                 window.location.href = '/admin/' + data.queue_id + '?token=' + data.organizer_token;
-            } else alert('Ошибка: ' + (data.detail || ''));
+            } else alert(t('error') + ': ' + (data.detail || ''));
         });
     </script>
 </body>
