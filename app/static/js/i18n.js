@@ -280,7 +280,7 @@ function getLang() {
 
 function setLang(lang) {
     localStorage.setItem(LANG_KEY, lang);
-    translatePage();
+    location.reload();
 }
 
 function translatePage() {
