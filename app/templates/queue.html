@@ -220,17 +220,21 @@
             otherSlotUsers = active.filter(p => p.slot_group !== me.slot_group);
             sameSlotUsers = active.filter(p => p.slot_group === me.slot_group);
         } else {
-            otherSlotUsers = active;
-            sameSlotUsers = [];
+            otherSlotUsers = [];
+            sameSlotUsers = active;
         }
 
         const maxPer = data.max_per_slot || 1;
-        document.getElementById('posTab').style.display = (maxPer > 1 && sameSlotUsers.length > 0) ? '' : 'none';
-        if (currentSwapType === 'position_change' && (maxPer <= 1 || sameSlotUsers.length === 0)) {
+        const canPosSwap = data.use_time_slots ? (maxPer > 1 && sameSlotUsers.length > 0) : sameSlotUsers.length > 0;
+        document.getElementById('posTab').style.display = canPosSwap ? '' : 'none';
+        const slotTab = document.querySelector('.swap-tab');
+        if (!data.use_time_slots) { slotTab.style.display = 'none'; setSwapType('position_change', document.getElementById('posTab')); }
+        else { slotTab.style.display = ''; }
+        if (currentSwapType === 'position_change' && !canPosSwap) {
             setSwapType('slot_change', document.querySelector('.swap-tab'));
         }
 
-        const hasSwapOptions = otherSlotUsers.length > 0 || (maxPer > 1 && sameSlotUsers.length > 0);
+        const hasSwapOptions = otherSlotUsers.length > 0 || canPosSwap;
         if (!hasSwapOptions) { document.getElementById('swapWrap').style.display='none'; return; }
         document.getElementById('swapWrap').style.display = 'block';
 
@@ -330,7 +334,7 @@
         fd.append('from_id', me.id);
         fd.append('from_token', userToken);
         fd.append('to_id', toId);
-        fd.append('swap_type', 'slot_change');
+        fd.append('swap_type', cachedData.use_time_slots ? 'slot_change' : 'position_change');
         const r = await fetch('/api/queue/'+queueId+'/swap/request', {method:'POST', body:fd});
         if (r.ok) { const res = await r.json(); if (res.status === 'auto_accepted') alert(t('swapDone')); loadQueue(); }
         else { const e = await r.json(); alert(e.detail||t('error')); }
