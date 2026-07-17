@@ -58,7 +58,7 @@
                 <details>
                     <summary class="settings-toggle" data-i18n="settings"></summary>
                     <form id="settingsForm" class="form compact">
-                        <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="use_time_slots" {{ 'checked' if queue.use_time_slots is none or queue.use_time_slots else '' }} id="useTimeSlots" onchange="toggleTimeSlotsSettings()"><span data-i18n="useTimeSlots"></span></label></div>
+                        <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="use_time_slots" {{ 'checked' if queue.use_time_slots is none or queue.use_time_slots else '' }} id="useTimeSlots" onchange="toggleTimeSlotsSettings()"><input type="hidden" name="use_time_slots" id="useTimeSlotsValue" value="{{ 'true' if queue.use_time_slots is none or queue.use_time_slots else 'false' }}"><span data-i18n="useTimeSlots"></span></label></div>
                         <div id="slotSettingsBlock" style="{{ '' if queue.use_time_slots is none or queue.use_time_slots else 'display:none' }}">
                         <div class="form-row">
                             <div class="form-group flex-1"><label data-i18n="startTime"></label><input type="time" name="start_time" class="input" value="{{ queue.start_time or '09:00' }}"></div>
@@ -129,6 +129,7 @@
 
     function toggleTimeSlotsSettings() {
         const checked = document.getElementById('useTimeSlots').checked;
+        document.getElementById('useTimeSlotsValue').value = checked ? 'true' : 'false';
         document.getElementById('slotSettingsBlock').style.display = checked ? '' : 'none';
     }
 

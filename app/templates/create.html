@@ -37,7 +37,7 @@
                 </div>
                 <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_delay" checked><span data-i18n="allowDelay"></span></label></div>
                 <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="allow_swap"><span data-i18n="allowSwap"></span></label></div>
-                <div class="form-group"><label class="checkbox-label"><input type="checkbox" name="use_time_slots" checked id="useTimeSlots" onchange="toggleTimeSlots()"><span data-i18n="useTimeSlots"></span></label></div>
+                <div class="form-group"><label class="checkbox-label"><input type="checkbox" id="useTimeSlots" checked onchange="toggleTimeSlots()"><input type="hidden" name="use_time_slots" id="useTimeSlotsValue" value="true"><span data-i18n="useTimeSlots"></span></label></div>
                 <div class="slot-settings" id="slotSettingsBlock">
                     <h3 data-i18n="slotsConfig"></h3>
                     <div class="form-row">
@@ -78,6 +78,7 @@
             const checked = document.getElementById('useTimeSlots').checked;
             document.getElementById('slotSettingsBlock').style.display = checked ? 'block' : 'none';
             document.getElementById('maxPerSlotGroup').style.display = checked ? 'flex' : 'none';
+            document.getElementById('useTimeSlotsValue').value = checked ? 'true' : 'false';
         }
         document.getElementById('createForm').addEventListener('submit', async function(e) {
             e.preventDefault();
