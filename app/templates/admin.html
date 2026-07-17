@@ -248,7 +248,9 @@
             const allIds = filtered.map(p => p.id);
             const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
 
-            html += '<div class="slot-group-header"><label class="check-label"><input type="checkbox" '+(allSelected?'checked':'')+' onchange="toggleGroup(this,['+allIds.map(id=>"'"+id+"'").join(',')+'])"></label><span class="slot-group-time">'+t('allParticipants')+'</span><span class="slot-group-count">'+filtered.length+'</span></div>';
+            if (useSlots) {
+                html += '<div class="slot-group-header"><label class="check-label"><input type="checkbox" '+(allSelected?'checked':'')+' onchange="toggleGroup(this,['+allIds.map(id=>"'"+id+"'").join(',')+'])"></label><span class="slot-group-time">'+t('allParticipants')+'</span><span class="slot-group-count">'+filtered.length+'</span></div>';
+            }
 
             for (const p of filtered) {
                 html += renderRow(p, false, data);

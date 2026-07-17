@@ -318,6 +318,17 @@ async def serve_participant(queue_id: str, token: str, participant_id: str, db: 
         raise HTTPException(404, "Participant not found")
     participant.status = ParticipantStatus.SERVED
     participant.served_at = datetime.now(timezone.utc)
+
+    pos_result = await db.execute(
+        select(Participant).where(
+            Participant.queue_id == queue_id,
+            Participant.status.in_([ParticipantStatus.WAITING, ParticipantStatus.CALLED, ParticipantStatus.DELAYED]),
+        ).order_by(Participant.position)
+    )
+    active = list(pos_result.scalars().all())
+    for i, p in enumerate(active):
+        p.position = i + 1
+
     await db.commit()
     return {"ok": True}
 
@@ -334,6 +345,17 @@ async def undo_participant(queue_id: str, token: str, participant_id: str, db: A
         participant.status = ParticipantStatus.WAITING
         participant.served_at = None
         participant.called_at = None
+
+        pos_result = await db.execute(
+            select(Participant).where(
+                Participant.queue_id == queue_id,
+                Participant.status.in_([ParticipantStatus.WAITING, ParticipantStatus.CALLED, ParticipantStatus.DELAYED]),
+            ).order_by(Participant.position)
+        )
+        active = list(pos_result.scalars().all())
+        for i, p in enumerate(active):
+            p.position = i + 1
+
         await db.commit()
     return {"ok": True}
 
@@ -347,6 +369,17 @@ async def skip_participant(queue_id: str, token: str, participant_id: str, db: A
     if not participant or participant.queue_id != queue_id:
         raise HTTPException(404, "Participant not found")
     participant.status = ParticipantStatus.SKIPPED
+
+    pos_result = await db.execute(
+        select(Participant).where(
+            Participant.queue_id == queue_id,
+            Participant.status.in_([ParticipantStatus.WAITING, ParticipantStatus.CALLED, ParticipantStatus.DELAYED]),
+        ).order_by(Participant.position)
+    )
+    active = list(pos_result.scalars().all())
+    for i, p in enumerate(active):
+        p.position = i + 1
+
     await db.commit()
     return {"ok": True}
 

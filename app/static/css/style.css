@@ -269,6 +269,7 @@ a:hover { color: var(--primary-hover); }
 }
 .slot-now-text { color: var(--green); background: rgba(34, 197, 94, 0.1); }
 .slot-served-text { color: var(--green); background: rgba(34, 197, 94, 0.1); }
+.slot-delayed-text { color: var(--yellow); background: rgba(234, 179, 8, 0.1); }
 
 .my-status-box { text-align: center; margin-bottom: 16px; }
 .queue-actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 24px; flex-wrap: wrap; }

@@ -185,6 +185,15 @@
         } else if (me.status === 'served') {
             slotBox.textContent = t('youServed'); slotBox.className = 'position-slot slot-served-text';
             posLabel.textContent = t('statusWaiting');
+        } else if (me.status === 'delayed') {
+            posLabel.textContent = t('positionLabel');
+            if (me.slot_label && data.use_time_slots) {
+                slotBox.textContent = me.slot_label; slotBox.className = 'position-slot';
+            } else if (data.use_time_slots) {
+                slotBox.textContent = t('yourSlot'); slotBox.className = 'position-slot';
+            } else {
+                slotBox.textContent = t('delayed'); slotBox.className = 'position-slot slot-delayed-text';
+            }
         } else if (me.slot_label && data.use_time_slots) {
             slotBox.textContent = me.slot_label; slotBox.className = 'position-slot';
             const slotPeople = data.participants.filter(p => ['waiting','called','delayed'].includes(p.status) && p.slot_group === me.slot_group).sort((a,b)=>a.position-b.position);
