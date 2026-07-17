@@ -282,7 +282,7 @@
 
         let html = '<div class="'+cls+'" data-id="'+p.id+'">';
         html += '<div class="slot-left">';
-        if (!isDone) html += '<label class="check-label"><input type="checkbox" '+checked+' onchange="toggleSelect(\''+p.id+'\')"></label>';
+        if (!isDone && useSlots) html += '<label class="check-label"><input type="checkbox" '+checked+' onchange="toggleSelect(\''+p.id+'\')"></label>';
         html += '<span class="slot-pos">'+p.position+'</span>';
         html += '<span class="slot-name">'+esc(p.name)+'</span>';
         if (isCalled) html += '<span class="status-pill called-pill" data-i18n="called"></span>';
